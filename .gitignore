@@ -1,0 +1,8 @@
+target/
+logs/
+*.log
+.idea/
+*.iml
+storage/files/*
+!storage/files/.gitkeep
+

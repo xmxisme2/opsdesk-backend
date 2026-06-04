@@ -1,0 +1,40 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: opsdesk-backend
+  datasource:
+    # 本地开发数据库配置，生产环境后续改为环境变量或外部配置。
+    url: jdbc:mysql://localhost:3306/opsdesk?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: root123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      # Redis 首版用于验证码、token 黑名单、权限缓存和未读数。
+      host: 127.0.0.1
+      port: 6379
+      timeout: 3s
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+mybatis:
+  mapper-locations: classpath*:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+opsdesk:
+  security:
+    # JWT 密钥后续在认证模块落地时迁移到环境变量或安全配置中心。
+    jwt-secret: dev-only-change-me
+  storage:
+    # 附件首版落盘到本地相对目录，接口不返回服务器绝对路径。
+    file-root: storage/files
