@@ -16,11 +16,13 @@ import java.util.List;
 @Service
 public class UserProfileServiceImpl implements UserProfileService {
 
+    /** 男性默认头像选项：注册和个人资料页在未上传头像时使用，不允许前端随意传入不存在的编码。 */
     private static final List<AvatarOptionVO> MALE_OPTIONS = List.of(
             new AvatarOptionVO("avatar_male_01", "/assets/avatars/avatar_male_01.png", "男生默认头像 1"),
             new AvatarOptionVO("avatar_male_02", "/assets/avatars/avatar_male_02.png", "男生默认头像 2")
     );
 
+    /** 女性默认头像选项：注册和个人资料页在未上传头像时使用，不允许前端随意传入不存在的编码。 */
     private static final List<AvatarOptionVO> FEMALE_OPTIONS = List.of(
             new AvatarOptionVO("avatar_female_01", "/assets/avatars/avatar_female_01.png", "女生默认头像 1"),
             new AvatarOptionVO("avatar_female_02", "/assets/avatars/avatar_female_02.png", "女生默认头像 2")

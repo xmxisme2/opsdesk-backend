@@ -29,8 +29,13 @@ import java.util.UUID;
 @Service
 public class CaptchaServiceImpl implements CaptchaService {
 
+    /** 图形验证码 Redis Key 前缀：按 captchaId 保存验证码文本。 */
     private static final String CAPTCHA_KEY_PREFIX = "captcha:";
+
+    /** 图形验证码有效期：登录保护场景固定 5 分钟过期。 */
     private static final int EXPIRES_SECONDS = 5 * 60;
+
+    /** 验证码候选字符集：排除容易混淆的 I、O、0、1 等字符。 */
     private static final String CANDIDATES = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
     private final StringRedisTemplate stringRedisTemplate;

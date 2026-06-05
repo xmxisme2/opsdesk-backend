@@ -28,4 +28,47 @@ public interface PermissionMapper {
             ORDER BY p.sort, p.id
             """)
     List<Permission> findEnabledByUserId(@Param("userId") Long userId);
+
+    @Select("""
+            <script>
+            SELECT *
+            FROM sys_permission
+            WHERE deleted = 0
+            <if test="type != null and type != ''">
+              AND type = #{type}
+            </if>
+            <if test="enabled != null">
+              AND enabled = #{enabled}
+            </if>
+            ORDER BY sort, id
+            </script>
+            """)
+    List<Permission> findAll(@Param("type") String type,
+                             @Param("enabled") Integer enabled);
+
+    @Select("""
+            <script>
+            SELECT *
+            FROM sys_permission
+            WHERE deleted = 0
+              AND enabled = 1
+              AND id IN
+              <foreach collection="ids" item="id" open="(" separator="," close=")">
+                #{id}
+              </foreach>
+            ORDER BY sort, id
+            </script>
+            """)
+    List<Permission> findEnabledByIds(@Param("ids") List<Long> ids);
+
+    @Select("""
+            SELECT p.id
+            FROM sys_permission p
+            INNER JOIN sys_role_permission rp ON rp.permission_id = p.id
+            WHERE rp.role_id = #{roleId}
+              AND rp.deleted = 0
+              AND p.deleted = 0
+            ORDER BY p.sort, p.id
+            """)
+    List<Long> findIdsByRoleId(@Param("roleId") Long roleId);
 }

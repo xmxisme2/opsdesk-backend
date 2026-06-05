@@ -31,6 +31,7 @@ import java.util.Set;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    /** 精确匹配的公开接口路径：这些入口不需要 JWT，主要用于健康检查、认证入口和公开头像选项。 */
     private static final Set<String> PUBLIC_EXACT_PATHS = Set.of(
             "/api/health/check",
             "/api/auth/register",

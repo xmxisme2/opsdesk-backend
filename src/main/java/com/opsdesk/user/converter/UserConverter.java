@@ -19,6 +19,7 @@ import java.util.List;
 @Component
 public class UserConverter {
 
+    /** 用户时间字段输出格式：保持当前用户接口中的创建时间和更新时间展示一致。 */
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public UserVO toVO(SysUser user,

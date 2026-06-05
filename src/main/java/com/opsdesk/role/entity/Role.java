@@ -22,4 +22,7 @@ public class Role {
     private Integer enabled;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+    private Long createBy;
+    private Long updateBy;
+    private Integer deleted;
 }

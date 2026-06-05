@@ -33,13 +33,28 @@ import java.util.UUID;
 @Service
 public class TokenServiceImpl implements TokenService {
 
+    /** access token 类型标识：仅用于短期访问令牌，禁止作为刷新令牌使用。 */
     private static final String TOKEN_TYPE_ACCESS = "ACCESS";
+
+    /** refresh token 类型标识：仅用于刷新会话，不能直接访问业务接口。 */
     private static final String TOKEN_TYPE_REFRESH = "REFRESH";
+
+    /** access token 黑名单 Redis Key 前缀：退出登录后按 tokenId 写入剩余有效期。 */
     private static final String BLACKLIST_KEY_PREFIX = "auth:blacklist:";
+
+    /** refresh token 会话 Redis Key 前缀：按 tokenId 保存所属用户 ID。 */
     private static final String REFRESH_KEY_PREFIX = "auth:refresh:";
+
+    /** 用户会话集合 Redis Key 前缀：用于踢出其他设备或失效全部 refresh token。 */
     private static final String USER_SESSION_KEY_PREFIX = "auth:user:sessions:";
+
+    /** access token 默认有效期：首版固定为 2 小时。 */
     private static final long ACCESS_EXPIRES_SECONDS = 2 * 60 * 60L;
+
+    /** refresh token 默认有效期：未勾选记住登录时固定为 7 天。 */
     private static final long REFRESH_EXPIRES_SECONDS = 7 * 24 * 60 * 60L;
+
+    /** 记住登录 refresh token 有效期：勾选记住登录时固定为 30 天。 */
     private static final long REMEMBER_REFRESH_EXPIRES_SECONDS = 30 * 24 * 60 * 60L;
 
     private final StringRedisTemplate stringRedisTemplate;

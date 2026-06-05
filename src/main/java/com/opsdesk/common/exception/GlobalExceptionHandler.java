@@ -4,6 +4,7 @@ import com.opsdesk.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -23,6 +24,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException exception) {
         return ResponseEntity.ok(ApiResponse.error(exception.getErrorCode(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException() {
+        return ResponseEntity.ok(ApiResponse.error(ErrorCode.FORBIDDEN));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -60,4 +66,3 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ErrorCode.SYSTEM_ERROR));
     }
 }
-

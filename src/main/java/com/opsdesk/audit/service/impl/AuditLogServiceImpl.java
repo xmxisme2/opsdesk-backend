@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuditLogServiceImpl implements AuditLogService {
 
+    /** 审计日志服务记录器：审计写库失败时只写应用日志，不阻断主业务流程。 */
     private static final Logger LOGGER = LoggerFactory.getLogger(AuditLogServiceImpl.class);
 
     private final AuditLogMapper auditLogMapper;

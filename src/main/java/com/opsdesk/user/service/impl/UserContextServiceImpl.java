@@ -26,6 +26,7 @@ import java.util.List;
 @Service
 public class UserContextServiceImpl implements UserContextService {
 
+    /** 可登录用户状态：只有 ACTIVE 账号允许继续加载安全上下文和访问业务接口。 */
     private static final String STATUS_ACTIVE = "ACTIVE";
 
     private final SysUserMapper sysUserMapper;

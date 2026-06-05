@@ -40,8 +40,13 @@ import org.springframework.util.StringUtils;
 @Service
 public class AuthServiceImpl implements AuthService {
 
+    /** 新注册用户默认角色编码：注册成功后自动绑定 USER 角色。 */
     private static final String DEFAULT_ROLE_CODE = "USER";
+
+    /** 用户正常状态编码：只有 ACTIVE 账号允许登录和继续访问业务接口。 */
     private static final String STATUS_ACTIVE = "ACTIVE";
+
+    /** 用户审计业务类型：注册、登录、退出、改密等用户操作统一归入 USER。 */
     private static final String BIZ_TYPE_USER = "USER";
 
     private final SysUserMapper sysUserMapper;
