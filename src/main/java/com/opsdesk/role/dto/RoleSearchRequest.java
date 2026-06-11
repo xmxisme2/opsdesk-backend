@@ -1,5 +1,6 @@
 package com.opsdesk.role.dto;
 
+import com.opsdesk.common.pagination.PageQuery;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.util.StringUtils;
@@ -11,23 +12,10 @@ import org.springframework.util.StringUtils;
  */
 @Getter
 @Setter
-public class RoleSearchRequest {
+public class RoleSearchRequest extends PageQuery {
 
-    private Long page = 1L;
-    private Long size = 20L;
     private String keyword;
     private Boolean enabled;
-
-    public long normalizedPage() {
-        return page == null || page < 1 ? 1L : page;
-    }
-
-    public long normalizedSize() {
-        if (size == null || size < 1) {
-            return 20L;
-        }
-        return Math.min(size, 100L);
-    }
 
     public String normalizedKeyword() {
         return StringUtils.hasText(keyword) ? keyword.trim() : null;

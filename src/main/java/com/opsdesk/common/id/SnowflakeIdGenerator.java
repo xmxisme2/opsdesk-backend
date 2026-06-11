@@ -13,7 +13,7 @@ import java.security.SecureRandom;
 public class SnowflakeIdGenerator {
 
     /** 自定义纪元毫秒时间戳：用于缩短生成 ID 的时间位长度，保持同一项目内稳定。 */
-    private static final long EPOCH = 1782576000000L;
+    private static final long EPOCH = 1704067200000L; // 2024-01-01T00:00:00Z
 
     /** 机器位长度：预留 10 位支持不同实例生成不同机器号。 */
     private static final long MACHINE_ID_BITS = 10L;
