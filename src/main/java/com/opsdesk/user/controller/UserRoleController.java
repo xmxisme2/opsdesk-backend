@@ -1,6 +1,9 @@
 package com.opsdesk.user.controller;
 
 import com.opsdesk.common.response.ApiResponse;
+import com.opsdesk.common.ratelimit.RateLimit;
+import com.opsdesk.common.ratelimit.RateLimitDefaults;
+import com.opsdesk.common.ratelimit.RateLimitKeyType;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.user.dto.UserRoleUpdateRequest;
 import com.opsdesk.user.service.UserRoleService;
@@ -32,6 +35,9 @@ public class UserRoleController {
     }
 
     @PostMapping("/{id}/roles/update")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<UserVO> updateRoles(@PathVariable String id,
                                            @Valid @RequestBody UserRoleUpdateRequest request,
                                            @AuthenticationPrincipal CurrentUser currentUser,

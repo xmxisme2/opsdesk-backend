@@ -2,6 +2,9 @@ package com.opsdesk.role.controller;
 
 import com.opsdesk.common.response.ApiResponse;
 import com.opsdesk.common.response.PageResult;
+import com.opsdesk.common.ratelimit.RateLimit;
+import com.opsdesk.common.ratelimit.RateLimitDefaults;
+import com.opsdesk.common.ratelimit.RateLimitKeyType;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.role.dto.RoleCreateRequest;
 import com.opsdesk.role.dto.RolePermissionUpdateRequest;
@@ -36,11 +39,17 @@ public class RoleController {
     }
 
     @PostMapping("/search")
+    @RateLimit(limit = RateLimitDefaults.SEARCH_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<PageResult<RoleVO>> search(@RequestBody(required = false) RoleSearchRequest request) {
         return ApiResponse.success(roleService.search(request));
     }
 
     @PostMapping("/create")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<RoleVO> create(@Valid @RequestBody RoleCreateRequest request,
                                       @AuthenticationPrincipal CurrentUser currentUser,
                                       HttpServletRequest servletRequest) {
@@ -58,6 +67,9 @@ public class RoleController {
     }
 
     @PostMapping("/{id}/update")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<RoleVO> update(@PathVariable String id,
                                       @Valid @RequestBody RoleUpdateRequest request,
                                       @AuthenticationPrincipal CurrentUser currentUser,
@@ -72,6 +84,9 @@ public class RoleController {
     }
 
     @PostMapping("/{id}/delete")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<Void> delete(@PathVariable String id,
                                     @AuthenticationPrincipal CurrentUser currentUser,
                                     HttpServletRequest servletRequest) {
@@ -85,6 +100,9 @@ public class RoleController {
     }
 
     @PostMapping("/{id}/permissions/update")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<RoleVO> updatePermissions(@PathVariable String id,
                                                  @Valid @RequestBody RolePermissionUpdateRequest request,
                                                  @AuthenticationPrincipal CurrentUser currentUser,

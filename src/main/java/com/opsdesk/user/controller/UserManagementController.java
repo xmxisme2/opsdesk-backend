@@ -2,6 +2,9 @@ package com.opsdesk.user.controller;
 
 import com.opsdesk.common.response.ApiResponse;
 import com.opsdesk.common.response.PageResult;
+import com.opsdesk.common.ratelimit.RateLimit;
+import com.opsdesk.common.ratelimit.RateLimitDefaults;
+import com.opsdesk.common.ratelimit.RateLimitKeyType;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.user.dto.UserCreateRequest;
 import com.opsdesk.user.dto.UserResetPasswordRequest;
@@ -38,11 +41,17 @@ public class UserManagementController {
     }
 
     @PostMapping("/search")
+    @RateLimit(limit = RateLimitDefaults.SEARCH_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<PageResult<UserVO>> search(@RequestBody(required = false) UserSearchRequest request) {
         return ApiResponse.success(userManagementService.search(request));
     }
 
     @PostMapping("/create")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<UserVO> create(@Valid @RequestBody UserCreateRequest request,
                                       @AuthenticationPrincipal CurrentUser currentUser,
                                       HttpServletRequest servletRequest) {
@@ -60,6 +69,9 @@ public class UserManagementController {
     }
 
     @PostMapping("/{id}/update")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<UserVO> update(@PathVariable String id,
                                       @Valid @RequestBody UserUpdateRequest request,
                                       @AuthenticationPrincipal CurrentUser currentUser,
@@ -74,6 +86,9 @@ public class UserManagementController {
     }
 
     @PostMapping("/{id}/status")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<UserVO> updateStatus(@PathVariable String id,
                                             @Valid @RequestBody UserStatusUpdateRequest request,
                                             @AuthenticationPrincipal CurrentUser currentUser,
@@ -88,6 +103,9 @@ public class UserManagementController {
     }
 
     @PostMapping("/{id}/delete")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<Void> delete(@PathVariable String id,
                                     @AuthenticationPrincipal CurrentUser currentUser,
                                     HttpServletRequest servletRequest) {
@@ -101,6 +119,9 @@ public class UserManagementController {
     }
 
     @PostMapping("/{id}/reset-password")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<UserResetPasswordVO> resetPassword(@PathVariable String id,
                                                          @Valid @RequestBody(required = false) UserResetPasswordRequest request,
                                                          @AuthenticationPrincipal CurrentUser currentUser,

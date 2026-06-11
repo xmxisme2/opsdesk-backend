@@ -1,6 +1,9 @@
 package com.opsdesk.permission.controller;
 
 import com.opsdesk.common.response.ApiResponse;
+import com.opsdesk.common.ratelimit.RateLimit;
+import com.opsdesk.common.ratelimit.RateLimitDefaults;
+import com.opsdesk.common.ratelimit.RateLimitKeyType;
 import com.opsdesk.permission.dto.PermissionTreeRequest;
 import com.opsdesk.permission.service.PermissionService;
 import com.opsdesk.permission.vo.PermissionVO;
@@ -29,6 +32,9 @@ public class PermissionController {
     }
 
     @PostMapping("/tree")
+    @RateLimit(limit = RateLimitDefaults.SEARCH_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<List<PermissionVO>> tree(@RequestBody(required = false) PermissionTreeRequest request) {
         return ApiResponse.success(permissionService.tree(request));
     }

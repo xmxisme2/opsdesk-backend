@@ -37,6 +37,10 @@ public final class ApiResponse<T> {
         return new ApiResponse<>(errorCode.getCode(), message, null);
     }
 
+    public static <T> ApiResponse<T> error(ErrorCode errorCode, String message, T data) {
+        return new ApiResponse<>(errorCode.getCode(), message, data);
+    }
+
     public int getCode() {
         return code;
     }
@@ -49,4 +53,3 @@ public final class ApiResponse<T> {
         return data;
     }
 }
-

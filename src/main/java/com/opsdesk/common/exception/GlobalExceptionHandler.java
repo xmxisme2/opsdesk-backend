@@ -1,5 +1,7 @@
 package com.opsdesk.common.exception;
 
+import com.opsdesk.common.ratelimit.RateLimitExceededException;
+import com.opsdesk.common.ratelimit.RateLimitExceededVO;
 import com.opsdesk.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -24,6 +26,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException exception) {
         return ResponseEntity.ok(ApiResponse.error(exception.getErrorCode(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<RateLimitExceededVO>> handleRateLimitExceeded(RateLimitExceededException exception) {
+        return ResponseEntity.ok(ApiResponse.error(
+                ErrorCode.REQUEST_TOO_FREQUENT,
+                exception.getMessage(),
+                new RateLimitExceededVO(exception.getRetryAfterSeconds())
+        ));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

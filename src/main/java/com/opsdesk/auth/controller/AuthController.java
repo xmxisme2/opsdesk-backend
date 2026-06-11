@@ -13,6 +13,9 @@ import com.opsdesk.auth.vo.CaptchaVO;
 import com.opsdesk.auth.vo.KickoutOthersVO;
 import com.opsdesk.auth.vo.LoginResultVO;
 import com.opsdesk.auth.vo.SmsCodeSendVO;
+import com.opsdesk.common.ratelimit.RateLimit;
+import com.opsdesk.common.ratelimit.RateLimitDefaults;
+import com.opsdesk.common.ratelimit.RateLimitKeyType;
 import com.opsdesk.common.response.ApiResponse;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.user.vo.UserVO;
@@ -44,23 +47,38 @@ public class AuthController {
     }
 
     @PostMapping("/captcha")
+    @RateLimit(limit = RateLimitDefaults.CAPTCHA_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.IP)
     public ApiResponse<CaptchaVO> captcha(@RequestBody(required = false) CaptchaRequest request) {
         CaptchaRequest actualRequest = request == null ? new CaptchaRequest() : request;
         return ApiResponse.success(captchaService.createCaptcha(actualRequest));
     }
 
     @PostMapping("/sms-code/send")
+    @RateLimit(limit = RateLimitDefaults.SMS_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.IP_AND_PHONE)
+    @RateLimit(limit = RateLimitDefaults.SMS_LIMIT_PER_DAY,
+            windowSeconds = RateLimitDefaults.ONE_DAY_SECONDS,
+            keyType = RateLimitKeyType.IP_AND_PHONE)
     public ApiResponse<SmsCodeSendVO> sendSmsCode(@Valid @RequestBody SmsCodeSendRequest request) {
         return ApiResponse.success(authService.sendSmsCode(request));
     }
 
     @PostMapping("/register")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.IP_AND_PHONE)
     public ApiResponse<UserVO> register(@Valid @RequestBody RegisterRequest request,
                                         HttpServletRequest servletRequest) {
         return ApiResponse.success(authService.register(request, clientIp(servletRequest), userAgent(servletRequest)));
     }
 
     @PostMapping("/login")
+    @RateLimit(limit = RateLimitDefaults.LOGIN_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.IP_AND_PHONE)
     public ApiResponse<LoginResultVO> login(@Valid @RequestBody LoginRequest request,
                                             HttpServletRequest servletRequest) {
         return ApiResponse.success(authService.login(request, clientIp(servletRequest), userAgent(servletRequest)));
@@ -89,6 +107,9 @@ public class AuthController {
     }
 
     @PostMapping("/password")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<Void> changePassword(@AuthenticationPrincipal CurrentUser currentUser,
                                             @Valid @RequestBody PasswordChangeRequest request,
                                             HttpServletRequest servletRequest) {
@@ -97,6 +118,9 @@ public class AuthController {
     }
 
     @PostMapping("/sessions/kickout-others")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
     public ApiResponse<KickoutOthersVO> kickoutOthers(@AuthenticationPrincipal CurrentUser currentUser,
                                                       @Valid @RequestBody KickoutOthersRequest request,
                                                       HttpServletRequest servletRequest) {
