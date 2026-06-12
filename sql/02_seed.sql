@@ -1,5 +1,7 @@
 -- OpsDesk 初始化数据脚本
 -- 管理员登录口径：手机号 13800000000，密码 root123456。
+-- 注意：不要使用 PowerShell 的 Get-Content ... | mysql 管道执行本文件，管道可能把中文种子数据转成问号。
+-- 推荐使用 mysql 客户端 source 方式，或执行同目录下的 init-local-db.ps1。
 
 USE opsdesk;
 
@@ -30,7 +32,7 @@ VALUES
   (1500, 'MENU_SYSTEM', '系统管理', 'MENU', NULL, '/system', NULL, 90, 1, NULL, NULL),
   (1510, 'MENU_SYSTEM_USERS', '用户管理', 'MENU', 1500, '/system/users', NULL, 91, 1, NULL, NULL),
   (1520, 'MENU_SYSTEM_ROLES', '角色管理', 'MENU', 1500, '/system/roles', NULL, 92, 1, NULL, NULL),
-  (1530, 'MENU_SYSTEM_ORG', '组织管理', 'MENU', 1500, '/system/org', NULL, 93, 1, NULL, NULL),
+  (1530, 'MENU_SYSTEM_ORG', '组织管理', 'MENU', 1500, '/system/organization', NULL, 93, 1, NULL, NULL),
   (1540, 'MENU_SYSTEM_TICKET_CATEGORY', '工单分类', 'MENU', 1500, '/system/ticket-categories', NULL, 94, 1, NULL, NULL),
   (1550, 'MENU_SYSTEM_AUDIT', '操作日志', 'MENU', 1500, '/system/audit', NULL, 95, 1, NULL, NULL),
   (1560, 'MENU_SYSTEM_CONFIG', '系统配置', 'MENU', 1500, '/system/configs', NULL, 96, 1, NULL, NULL),
@@ -44,6 +46,12 @@ VALUES
   (2007, 'BUTTON_USER_DELETE', '删除用户', 'BUTTON', 1510, NULL, NULL, 208, 1, NULL, NULL),
   (2008, 'BUTTON_USER_STATUS_UPDATE', '启停用户', 'BUTTON', 1510, NULL, NULL, 209, 1, NULL, NULL),
   (2009, 'BUTTON_USER_PASSWORD_RESET', '重置用户密码', 'BUTTON', 1510, NULL, NULL, 210, 1, NULL, NULL),
+  (2010, 'BUTTON_DEPARTMENT_CREATE', '创建部门', 'BUTTON', 1530, NULL, NULL, 211, 1, NULL, NULL),
+  (2011, 'BUTTON_DEPARTMENT_UPDATE', '编辑部门', 'BUTTON', 1530, NULL, NULL, 212, 1, NULL, NULL),
+  (2012, 'BUTTON_DEPARTMENT_DELETE', '删除部门', 'BUTTON', 1530, NULL, NULL, 213, 1, NULL, NULL),
+  (2013, 'BUTTON_TEAM_CREATE', '创建团队', 'BUTTON', 1530, NULL, NULL, 214, 1, NULL, NULL),
+  (2014, 'BUTTON_TEAM_UPDATE', '编辑团队', 'BUTTON', 1530, NULL, NULL, 215, 1, NULL, NULL),
+  (2015, 'BUTTON_TEAM_MEMBER_UPDATE', '维护团队成员', 'BUTTON', 1530, NULL, NULL, 216, 1, NULL, NULL),
   (3000, 'API_ROLES_SEARCH', '角色列表接口', 'API', 1520, '/api/roles/search', 'POST', 301, 1, NULL, NULL),
   (3001, 'API_ROLES_CREATE', '创建角色接口', 'API', 1520, '/api/roles/create', 'POST', 302, 1, NULL, NULL),
   (3002, 'API_ROLES_DETAIL', '角色详情接口', 'API', 1520, '/api/roles/{id}/detail', 'POST', 303, 1, NULL, NULL),
@@ -58,7 +66,20 @@ VALUES
   (3011, 'API_USERS_UPDATE', '编辑用户接口', 'API', 1510, '/api/users/{id}/update', 'POST', 312, 1, NULL, NULL),
   (3012, 'API_USERS_STATUS', '启停用户接口', 'API', 1510, '/api/users/{id}/status', 'POST', 313, 1, NULL, NULL),
   (3013, 'API_USERS_DELETE', '删除用户接口', 'API', 1510, '/api/users/{id}/delete', 'POST', 314, 1, NULL, NULL),
-  (3014, 'API_USERS_RESET_PASSWORD', '重置用户密码接口', 'API', 1510, '/api/users/{id}/reset-password', 'POST', 315, 1, NULL, NULL)
+  (3014, 'API_USERS_RESET_PASSWORD', '重置用户密码接口', 'API', 1510, '/api/users/{id}/reset-password', 'POST', 315, 1, NULL, NULL),
+  (3015, 'API_DEPARTMENTS_TREE', '部门树接口', 'API', 1530, '/api/departments/tree', 'POST', 316, 1, NULL, NULL),
+  (3016, 'API_DEPARTMENTS_CREATE', '创建部门接口', 'API', 1530, '/api/departments/create', 'POST', 317, 1, NULL, NULL),
+  (3017, 'API_DEPARTMENTS_DETAIL', '部门详情接口', 'API', 1530, '/api/departments/{id}/detail', 'POST', 318, 1, NULL, NULL),
+  (3018, 'API_DEPARTMENTS_UPDATE', '编辑部门接口', 'API', 1530, '/api/departments/{id}/update', 'POST', 319, 1, NULL, NULL),
+  (3019, 'API_DEPARTMENTS_DELETE', '删除部门接口', 'API', 1530, '/api/departments/{id}/delete', 'POST', 320, 1, NULL, NULL),
+  (3020, 'API_TEAMS_SEARCH', '团队列表接口', 'API', 1530, '/api/teams/search', 'POST', 321, 1, NULL, NULL),
+  (3021, 'API_TEAMS_CREATE', '创建团队接口', 'API', 1530, '/api/teams/create', 'POST', 322, 1, NULL, NULL),
+  (3022, 'API_TEAMS_DETAIL', '团队详情接口', 'API', 1530, '/api/teams/{id}/detail', 'POST', 323, 1, NULL, NULL),
+  (3023, 'API_TEAMS_UPDATE', '编辑团队接口', 'API', 1530, '/api/teams/{id}/update', 'POST', 324, 1, NULL, NULL),
+  (3024, 'API_TEAMS_DELETE', '删除团队接口', 'API', 1530, '/api/teams/{id}/delete', 'POST', 325, 1, NULL, NULL),
+  (3025, 'API_TEAMS_MEMBERS_SEARCH', '团队成员列表接口', 'API', 1530, '/api/teams/{id}/members/search', 'POST', 326, 1, NULL, NULL),
+  (3026, 'API_TEAMS_MEMBERS_UPDATE', '更新团队成员接口', 'API', 1530, '/api/teams/{id}/members/update', 'POST', 327, 1, NULL, NULL),
+  (3027, 'API_TEAMS_LEADERS_UPDATE', '设置团队负责人接口', 'API', 1530, '/api/teams/{id}/leaders/update', 'POST', 328, 1, NULL, NULL)
 ON DUPLICATE KEY UPDATE
   name = VALUES(name),
   type = VALUES(type),
@@ -111,6 +132,25 @@ VALUES
   (10036, 1, 3012, NULL, NULL),
   (10037, 1, 3013, NULL, NULL),
   (10038, 1, 3014, NULL, NULL),
+  (10039, 1, 2010, NULL, NULL),
+  (10040, 1, 2011, NULL, NULL),
+  (10041, 1, 2012, NULL, NULL),
+  (10042, 1, 2013, NULL, NULL),
+  (10043, 1, 2014, NULL, NULL),
+  (10044, 1, 2015, NULL, NULL),
+  (10045, 1, 3015, NULL, NULL),
+  (10046, 1, 3016, NULL, NULL),
+  (10047, 1, 3017, NULL, NULL),
+  (10048, 1, 3018, NULL, NULL),
+  (10049, 1, 3019, NULL, NULL),
+  (10050, 1, 3020, NULL, NULL),
+  (10051, 1, 3021, NULL, NULL),
+  (10052, 1, 3022, NULL, NULL),
+  (10053, 1, 3023, NULL, NULL),
+  (10054, 1, 3024, NULL, NULL),
+  (10055, 1, 3025, NULL, NULL),
+  (10056, 1, 3026, NULL, NULL),
+  (10057, 1, 3027, NULL, NULL),
   (11000, 2, 1000, NULL, NULL),
   (11001, 2, 1100, NULL, NULL),
   (11002, 2, 1110, NULL, NULL),

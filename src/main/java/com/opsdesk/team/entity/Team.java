@@ -1,4 +1,4 @@
-package com.opsdesk.department.entity;
+package com.opsdesk.team.entity;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -6,19 +6,18 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * 部门表实体。
+ * 工单处理团队实体。
  *
- * <p>映射 sys_department，承载部门树、主属部门选择和后台组织管理。</p>
+ * <p>映射 team 表，维护处理团队基础信息，为工单分派和团队看板提供组织基础。</p>
  */
 @Getter
 @Setter
-public class Department {
+public class Team {
 
     private Long id;
-    private Long parentId;
     private String name;
-    private Long leaderId;
-    private Integer sort;
+    private String description;
+    private String processingScope;
     private Integer enabled;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

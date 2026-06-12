@@ -81,6 +81,14 @@ public interface SysUserMapper {
                                  @Param("excludeId") Long excludeId);
 
     @Select("""
+            SELECT COUNT(1)
+            FROM sys_user
+            WHERE department_id = #{departmentId}
+              AND deleted = 0
+            """)
+    int countByDepartmentId(@Param("departmentId") Long departmentId);
+
+    @Select("""
             <script>
             SELECT COUNT(DISTINCT u.id)
             FROM sys_user u

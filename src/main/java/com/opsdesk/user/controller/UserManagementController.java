@@ -2,6 +2,7 @@ package com.opsdesk.user.controller;
 
 import com.opsdesk.common.response.ApiResponse;
 import com.opsdesk.common.response.PageResult;
+import com.opsdesk.common.idempotency.Idempotent;
 import com.opsdesk.common.ratelimit.RateLimit;
 import com.opsdesk.common.ratelimit.RateLimitDefaults;
 import com.opsdesk.common.ratelimit.RateLimitKeyType;
@@ -49,6 +50,7 @@ public class UserManagementController {
     }
 
     @PostMapping("/create")
+    @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.USER)
@@ -69,6 +71,7 @@ public class UserManagementController {
     }
 
     @PostMapping("/{id}/update")
+    @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.USER)
@@ -86,6 +89,7 @@ public class UserManagementController {
     }
 
     @PostMapping("/{id}/status")
+    @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.USER)
@@ -103,6 +107,7 @@ public class UserManagementController {
     }
 
     @PostMapping("/{id}/delete")
+    @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.USER)
@@ -119,6 +124,7 @@ public class UserManagementController {
     }
 
     @PostMapping("/{id}/reset-password")
+    @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.USER)

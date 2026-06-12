@@ -13,6 +13,7 @@ import com.opsdesk.auth.vo.CaptchaVO;
 import com.opsdesk.auth.vo.KickoutOthersVO;
 import com.opsdesk.auth.vo.LoginResultVO;
 import com.opsdesk.auth.vo.SmsCodeSendVO;
+import com.opsdesk.common.idempotency.Idempotent;
 import com.opsdesk.common.ratelimit.RateLimit;
 import com.opsdesk.common.ratelimit.RateLimitDefaults;
 import com.opsdesk.common.ratelimit.RateLimitKeyType;
@@ -67,6 +68,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
+    @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.IP_AND_PHONE)
@@ -107,6 +109,7 @@ public class AuthController {
     }
 
     @PostMapping("/password")
+    @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.USER)
@@ -118,6 +121,7 @@ public class AuthController {
     }
 
     @PostMapping("/sessions/kickout-others")
+    @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.USER)

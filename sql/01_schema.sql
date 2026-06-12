@@ -1,5 +1,7 @@
 -- OpsDesk 数据库建表脚本
 -- 执行目标：创建本地开发数据库和 V1.0 基础业务表。
+-- 注意：不要使用 PowerShell 的 Get-Content ... | mysql 管道执行本文件，管道可能把中文注释或字面量转成问号。
+-- 推荐使用 mysql 客户端 source 方式，或执行同目录下的 init-local-db.ps1。
 
 CREATE DATABASE IF NOT EXISTS opsdesk
   DEFAULT CHARACTER SET utf8mb4
