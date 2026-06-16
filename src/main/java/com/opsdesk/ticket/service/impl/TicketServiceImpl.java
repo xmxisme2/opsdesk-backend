@@ -1,0 +1,835 @@
+package com.opsdesk.ticket.service.impl;
+
+import com.opsdesk.common.exception.BusinessException;
+import com.opsdesk.common.exception.ErrorCode;
+import com.opsdesk.common.id.SnowflakeIdGenerator;
+import com.opsdesk.common.pagination.PageQuery;
+import com.opsdesk.common.response.PageResult;
+import com.opsdesk.common.security.CurrentUser;
+import com.opsdesk.common.util.IdParser;
+import com.opsdesk.team.entity.Team;
+import com.opsdesk.team.mapper.TeamMapper;
+import com.opsdesk.team.mapper.TeamMemberMapper;
+import com.opsdesk.ticket.converter.TicketConverter;
+import com.opsdesk.ticket.dto.TicketAssignRequest;
+import com.opsdesk.ticket.dto.TicketCompleteRequest;
+import com.opsdesk.ticket.dto.TicketCreateRequest;
+import com.opsdesk.ticket.dto.TicketReasonRequest;
+import com.opsdesk.ticket.dto.TicketSearchRequest;
+import com.opsdesk.ticket.dto.TicketTransferRequest;
+import com.opsdesk.ticket.dto.TicketUpdateRequest;
+import com.opsdesk.ticket.entity.Ticket;
+import com.opsdesk.ticket.entity.TicketCategory;
+import com.opsdesk.ticket.entity.TicketOperationLog;
+import com.opsdesk.ticket.entity.TicketWatch;
+import com.opsdesk.ticket.enums.TicketAction;
+import com.opsdesk.ticket.enums.TicketStatus;
+import com.opsdesk.ticket.mapper.TicketCategoryMapper;
+import com.opsdesk.ticket.mapper.TicketMapper;
+import com.opsdesk.ticket.mapper.TicketOperationLogMapper;
+import com.opsdesk.ticket.mapper.TicketWatchMapper;
+import com.opsdesk.ticket.service.TicketNoGenerator;
+import com.opsdesk.ticket.service.TicketService;
+import com.opsdesk.ticket.service.TicketStateContext;
+import com.opsdesk.ticket.service.TicketStateMachine;
+import com.opsdesk.ticket.vo.TicketListItemVO;
+import com.opsdesk.ticket.vo.TicketOperationLogVO;
+import com.opsdesk.ticket.vo.TicketVO;
+import com.opsdesk.ticket.vo.TicketWatchVO;
+import com.opsdesk.user.entity.SysUser;
+import com.opsdesk.user.mapper.SysUserMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * 工单主流程服务实现。
+ *
+ * <p>集中处理工单创建、草稿编辑、提交编号生成、状态机流转、资源范围校验和操作日志。</p>
+ */
+@Service
+public class TicketServiceImpl implements TicketService {
+
+    /** 管理员角色编码：可查看和操作全局工单，由认证上下文提供，外部请求体传入无效。 */
+    private static final String ROLE_ADMIN = "ADMIN";
+
+    /** 团队负责人角色编码：可操作所属团队工单，必须叠加 team_member 范围校验。 */
+    private static final String ROLE_MANAGER = "MANAGER";
+
+    /** 默认优先级：创建工单未传优先级时使用，允许外部传入的值必须在 ALLOWED_PRIORITIES 内。 */
+    private static final String DEFAULT_PRIORITY = "MEDIUM";
+
+    /** 允许的工单优先级编码：来自接口契约和数据库设计，外部只能传入这些枚举值。 */
+    private static final Set<String> ALLOWED_PRIORITIES = Set.of("LOW", "MEDIUM", "HIGH", "URGENT");
+
+    /** 草稿创建日志类型：写入 ticket_operation_log，表示工单对象已创建。 */
+    private static final String OPERATION_TICKET_CREATE = "TICKET_CREATE";
+
+    /** 草稿编辑日志类型：写入 ticket_operation_log，表示创建人修改了草稿信息。 */
+    private static final String OPERATION_TICKET_UPDATE = "TICKET_UPDATE";
+
+    /** 工单关注日志类型：记录用户关注工单，便于后续时间线聚合。 */
+    private static final String OPERATION_TICKET_WATCH = "TICKET_WATCH";
+
+    /** 取消关注日志类型：记录用户取消关注工单，便于后续时间线聚合。 */
+    private static final String OPERATION_TICKET_UNWATCH = "TICKET_UNWATCH";
+
+    /** 标签最大数量：避免单个工单标签过多拖慢列表展示和筛选，外部传入超过会报参数错误。 */
+    private static final int MAX_TAG_COUNT = 20;
+
+    /** 单个标签最大长度：防止过长标签污染列表展示，外部传入超过会报参数错误。 */
+    private static final int MAX_TAG_LENGTH = 30;
+
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    private final TicketMapper ticketMapper;
+    private final TicketCategoryMapper ticketCategoryMapper;
+    private final TicketOperationLogMapper ticketOperationLogMapper;
+    private final TicketWatchMapper ticketWatchMapper;
+    private final TeamMemberMapper teamMemberMapper;
+    private final SysUserMapper sysUserMapper;
+    private final SnowflakeIdGenerator idGenerator;
+    private final TicketNoGenerator ticketNoGenerator;
+    private final TicketStateMachine ticketStateMachine;
+    private final TeamMapper teamMapper;
+    private final TicketConverter ticketConverter;
+
+    public TicketServiceImpl(TicketMapper ticketMapper,
+                             TicketCategoryMapper ticketCategoryMapper,
+                             TicketOperationLogMapper ticketOperationLogMapper,
+                             TicketWatchMapper ticketWatchMapper,
+                             TeamMemberMapper teamMemberMapper,
+                             SysUserMapper sysUserMapper,
+                             SnowflakeIdGenerator idGenerator,
+                             TicketNoGenerator ticketNoGenerator,
+                             TicketStateMachine ticketStateMachine) {
+        this(ticketMapper, ticketCategoryMapper, ticketOperationLogMapper, ticketWatchMapper, teamMemberMapper,
+                sysUserMapper, idGenerator, ticketNoGenerator, ticketStateMachine, null, new TicketConverter());
+    }
+
+    @Autowired
+    public TicketServiceImpl(TicketMapper ticketMapper,
+                             TicketCategoryMapper ticketCategoryMapper,
+                             TicketOperationLogMapper ticketOperationLogMapper,
+                             TicketWatchMapper ticketWatchMapper,
+                             TeamMemberMapper teamMemberMapper,
+                             SysUserMapper sysUserMapper,
+                             SnowflakeIdGenerator idGenerator,
+                             TicketNoGenerator ticketNoGenerator,
+                             TicketStateMachine ticketStateMachine,
+                             TeamMapper teamMapper,
+                             TicketConverter ticketConverter) {
+        this.ticketMapper = ticketMapper;
+        this.ticketCategoryMapper = ticketCategoryMapper;
+        this.ticketOperationLogMapper = ticketOperationLogMapper;
+        this.ticketWatchMapper = ticketWatchMapper;
+        this.teamMemberMapper = teamMemberMapper;
+        this.sysUserMapper = sysUserMapper;
+        this.idGenerator = idGenerator;
+        this.ticketNoGenerator = ticketNoGenerator;
+        this.ticketStateMachine = ticketStateMachine;
+        this.teamMapper = teamMapper;
+        this.ticketConverter = ticketConverter;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO create(TicketCreateRequest request, CurrentUser currentUser, String requestIp, String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        TicketCategory category = loadEnabledCategory(parseRequiredId(request.getCategoryId(), "工单分类ID"));
+        LocalDateTime now = LocalDateTime.now();
+
+        Ticket ticket = new Ticket();
+        ticket.setId(idGenerator.nextId());
+        ticket.setTitle(normalizeRequiredText(request.getTitle(), "工单标题"));
+        ticket.setDescription(normalizeRequiredText(request.getDescription(), "问题描述"));
+        ticket.setCategoryId(category.getId());
+        ticket.setPriority(normalizePriority(request.getPriority()));
+        ticket.setStatus(TicketStatus.DRAFT.name());
+        ticket.setCreatorId(operatorId);
+        ticket.setDueTime(resolveDueTime(request.getDueTime(), category, now));
+        ticket.setOverdue(resolveOverdue(ticket.getDueTime(), now));
+        ticket.setTags(normalizeTags(request.getTags()));
+        ticket.setCreateTime(now);
+        ticket.setUpdateTime(now);
+        ticket.setCreateBy(operatorId);
+        ticket.setUpdateBy(operatorId);
+
+        if (Boolean.TRUE.equals(request.getSubmitNow())) {
+            submitNewTicket(ticket, category, currentUser);
+        }
+
+        ticketMapper.insert(ticket);
+        recordLog(ticket, OPERATION_TICKET_CREATE, null, ticket.getStatus(), operatorId,
+                "创建工单草稿", requestIp, userAgent);
+        if (Boolean.TRUE.equals(request.getSubmitNow())) {
+            recordLog(ticket, operationType(TicketAction.SUBMIT), TicketStatus.DRAFT.name(), ticket.getStatus(), operatorId,
+                    "提交工单", requestIp, userAgent);
+        }
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO updateDraft(String id,
+                                TicketUpdateRequest request,
+                                CurrentUser currentUser,
+                                String requestIp,
+                                String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureCreator(ticket, operatorId);
+        ensureStatus(ticket, TicketStatus.DRAFT);
+        TicketCategory category = loadEnabledCategory(parseRequiredId(request.getCategoryId(), "工单分类ID"));
+        LocalDateTime now = LocalDateTime.now();
+        String fromStatus = ticket.getStatus();
+
+        ticket.setTitle(normalizeRequiredText(request.getTitle(), "工单标题"));
+        ticket.setDescription(normalizeRequiredText(request.getDescription(), "问题描述"));
+        ticket.setCategoryId(category.getId());
+        ticket.setPriority(normalizePriority(request.getPriority()));
+        ticket.setDueTime(resolveDueTime(request.getDueTime(), category, now));
+        ticket.setOverdue(resolveOverdue(ticket.getDueTime(), now));
+        ticket.setTags(normalizeTags(request.getTags()));
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, OPERATION_TICKET_UPDATE, fromStatus, ticket.getStatus(), operatorId,
+                "编辑工单草稿", requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    public PageResult<TicketListItemVO> search(TicketSearchRequest request, CurrentUser currentUser) {
+        Long currentUserId = requireUserId(currentUser);
+        TicketSearchRequest safeRequest = request == null ? new TicketSearchRequest() : request;
+        long page = safeRequest.normalizedPage();
+        long size = safeRequest.normalizedSize();
+        SearchCondition condition = buildSearchCondition(safeRequest);
+        boolean admin = hasRole(currentUser, ROLE_ADMIN);
+
+        long total = ticketMapper.countSearch(condition.scope(), condition.ticketNo(), condition.keyword(),
+                condition.status(), condition.priority(), condition.categoryId(), condition.creatorId(),
+                condition.assigneeId(), condition.teamId(), condition.overdue(), condition.createdFrom(),
+                condition.createdTo(), currentUserId, admin);
+        if (total == 0) {
+            return PageResult.empty(page, size);
+        }
+        long offset = (page - 1) * size;
+        List<TicketListItemVO> records = ticketMapper.search(condition.scope(), condition.ticketNo(), condition.keyword(),
+                        condition.status(), condition.priority(), condition.categoryId(), condition.creatorId(),
+                        condition.assigneeId(), condition.teamId(), condition.overdue(), condition.createdFrom(),
+                        condition.createdTo(), currentUserId, admin, offset, size)
+                .stream()
+                .map(this::assembleTicketListItemVO)
+                .toList();
+        return new PageResult<>(records, page, size, total);
+    }
+
+    @Override
+    public TicketVO detail(String id, CurrentUser currentUser) {
+        Long currentUserId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureAccessible(ticket, currentUser);
+        boolean watching = ticketWatchMapper.countActive(ticket.getId(), currentUserId) > 0;
+        return assembleTicketVO(ticket, watching);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO submit(String id, CurrentUser currentUser, String requestIp, String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.SUBMIT,
+                buildStateContext(ticket, currentUser));
+        TicketCategory category = loadEnabledCategory(ticket.getCategoryId());
+        if (!StringUtils.hasText(ticket.getTicketNo())) {
+            ticket.setTicketNo(ticketNoGenerator.nextNo());
+        }
+        if (ticket.getTeamId() == null) {
+            ticket.setTeamId(category.getDefaultTeamId());
+        }
+        ticket.setStatus(targetStatus.name());
+        ticket.setOverdue(resolveOverdue(ticket.getDueTime(), LocalDateTime.now()));
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.SUBMIT), fromStatus, ticket.getStatus(), operatorId,
+                "提交工单", requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO assign(String id,
+                           TicketAssignRequest request,
+                           CurrentUser currentUser,
+                           String requestIp,
+                           String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        Long teamId = parseOptionalId(request == null ? null : request.getTeamId(), "处理团队ID");
+        Long assigneeId = parseOptionalId(request == null ? null : request.getAssigneeId(), "处理人ID");
+        if (teamId == null && assigneeId == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "处理团队和处理人至少需要填写一个");
+        }
+        ensureManagerScope(currentUser, teamId == null ? ticket.getTeamId() : teamId);
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.ASSIGN,
+                buildStateContext(ticket, currentUser));
+        ticket.setTeamId(teamId == null ? ticket.getTeamId() : teamId);
+        ticket.setAssigneeId(assigneeId);
+        ticket.setStatus(targetStatus.name());
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.ASSIGN), fromStatus, ticket.getStatus(), operatorId,
+                contentOrDefault(request == null ? null : request.getReason(), "分派工单"), requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO reject(String id,
+                           TicketReasonRequest request,
+                           CurrentUser currentUser,
+                           String requestIp,
+                           String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureReason(request == null ? null : request.getReason(), "驳回原因不能为空");
+        if (parseStatus(ticket.getStatus()) == TicketStatus.PENDING_ASSIGN) {
+            ensureManagerScope(currentUser, ticket.getTeamId());
+        }
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.REJECT,
+                buildStateContext(ticket, currentUser));
+        ticket.setStatus(targetStatus.name());
+        ticket.setAssigneeId(null);
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.REJECT), fromStatus, ticket.getStatus(), operatorId,
+                request.getReason().trim(), requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO accept(String id, CurrentUser currentUser, String requestIp, String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.ACCEPT,
+                buildStateContext(ticket, currentUser));
+        ticket.setAssigneeId(operatorId);
+        ticket.setStatus(targetStatus.name());
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.ACCEPT), fromStatus, ticket.getStatus(), operatorId,
+                "接单处理", requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO transfer(String id,
+                             TicketTransferRequest request,
+                             CurrentUser currentUser,
+                             String requestIp,
+                             String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        Long targetTeamId = parseOptionalId(request == null ? null : request.getTargetTeamId(), "目标团队ID");
+        Long targetAssigneeId = parseOptionalId(request == null ? null : request.getTargetAssigneeId(), "目标处理人ID");
+        if (targetTeamId == null && targetAssigneeId == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "目标团队和目标处理人至少需要填写一个");
+        }
+        ensureReason(request == null ? null : request.getReason(), "转派原因不能为空");
+        ensureManagerScope(currentUser, targetTeamId == null ? ticket.getTeamId() : targetTeamId);
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.TRANSFER,
+                buildStateContext(ticket, currentUser));
+        ticket.setTeamId(targetTeamId == null ? ticket.getTeamId() : targetTeamId);
+        ticket.setAssigneeId(targetAssigneeId);
+        ticket.setStatus(targetStatus.name());
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.TRANSFER), fromStatus, ticket.getStatus(), operatorId,
+                request.getReason().trim(), requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO complete(String id,
+                             TicketCompleteRequest request,
+                             CurrentUser currentUser,
+                             String requestIp,
+                             String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.COMPLETE,
+                buildStateContext(ticket, currentUser));
+        ticket.setStatus(targetStatus.name());
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.COMPLETE), fromStatus, ticket.getStatus(), operatorId,
+                contentOrDefault(request == null ? null : request.getCompleteRemark(), "提交处理完成"), requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO confirm(String id,
+                            TicketReasonRequest request,
+                            CurrentUser currentUser,
+                            String requestIp,
+                            String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.CONFIRM,
+                buildStateContext(ticket, currentUser));
+        ticket.setStatus(targetStatus.name());
+        ticket.setCompletedTime(LocalDateTime.now());
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.CONFIRM), fromStatus, ticket.getStatus(), operatorId,
+                contentOrDefault(request == null ? null : request.getComment(), "确认完成"), requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO reopen(String id,
+                           TicketReasonRequest request,
+                           CurrentUser currentUser,
+                           String requestIp,
+                           String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureReason(request == null ? null : request.getReason(), "重开原因不能为空");
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.REOPEN,
+                buildStateContext(ticket, currentUser));
+        ticket.setStatus(targetStatus.name());
+        ticket.setCompletedTime(null);
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.REOPEN), fromStatus, ticket.getStatus(), operatorId,
+                request.getReason().trim(), requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO close(String id,
+                          TicketReasonRequest request,
+                          CurrentUser currentUser,
+                          String requestIp,
+                          String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureManagerScopeForClose(currentUser, ticket);
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.CLOSE,
+                buildStateContext(ticket, currentUser));
+        ticket.setStatus(targetStatus.name());
+        ticket.setClosedTime(LocalDateTime.now());
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.CLOSE), fromStatus, ticket.getStatus(), operatorId,
+                contentOrDefault(request == null ? null : request.getReason(), "关闭工单"), requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketVO cancel(String id,
+                           TicketReasonRequest request,
+                           CurrentUser currentUser,
+                           String requestIp,
+                           String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureReason(request == null ? null : request.getReason(), "取消原因不能为空");
+        String fromStatus = ticket.getStatus();
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.CANCEL,
+                buildStateContext(ticket, currentUser));
+        ticket.setStatus(targetStatus.name());
+        ticket.setUpdateBy(operatorId);
+        updateTicket(ticket);
+        recordLog(ticket, operationType(TicketAction.CANCEL), fromStatus, ticket.getStatus(), operatorId,
+                request.getReason().trim(), requestIp, userAgent);
+        return assembleTicketVO(ticket, currentUser);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketWatchVO watch(String id, CurrentUser currentUser, String requestIp, String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureAccessible(ticket, currentUser);
+        if (ticketWatchMapper.countActive(ticket.getId(), operatorId) == 0) {
+            TicketWatch watch = new TicketWatch();
+            watch.setId(idGenerator.nextId());
+            watch.setTicketId(ticket.getId());
+            watch.setUserId(operatorId);
+            watch.setCreateBy(operatorId);
+            watch.setUpdateBy(operatorId);
+            if (ticketWatchMapper.restoreDeleted(watch) == 0) {
+                ticketWatchMapper.insert(watch);
+            }
+            recordLog(ticket, OPERATION_TICKET_WATCH, ticket.getStatus(), ticket.getStatus(), operatorId,
+                    "关注工单", requestIp, userAgent);
+        }
+        return new TicketWatchVO(true);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TicketWatchVO unwatch(String id, CurrentUser currentUser, String requestIp, String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureAccessible(ticket, currentUser);
+        if (ticketWatchMapper.logicalDelete(ticket.getId(), operatorId, operatorId) > 0) {
+            recordLog(ticket, OPERATION_TICKET_UNWATCH, ticket.getStatus(), ticket.getStatus(), operatorId,
+                    "取消关注工单", requestIp, userAgent);
+        }
+        return new TicketWatchVO(false);
+    }
+
+    @Override
+    public PageResult<TicketOperationLogVO> searchOperationLogs(String id, PageQuery request, CurrentUser currentUser) {
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureAccessible(ticket, currentUser);
+        PageQuery safeRequest = request == null ? new PageQuery() : request;
+        long page = safeRequest.normalizedPage();
+        long size = safeRequest.normalizedSize();
+        long total = ticketOperationLogMapper.countByTicketId(ticket.getId());
+        if (total == 0) {
+            return PageResult.empty(page, size);
+        }
+        long offset = (page - 1) * size;
+        List<TicketOperationLogVO> records = ticketOperationLogMapper.searchByTicketId(ticket.getId(), offset, size)
+                .stream()
+                .map(log -> ticketConverter.toOperationLogVO(log, findUser(log.getOperatorId())))
+                .toList();
+        return new PageResult<>(records, page, size, total);
+    }
+
+    private void submitNewTicket(Ticket ticket, TicketCategory category, CurrentUser currentUser) {
+        TicketStatus targetStatus = ticketStateMachine.nextStatus(TicketStatus.DRAFT, TicketAction.SUBMIT,
+                buildStateContext(ticket, currentUser));
+        ticket.setTicketNo(ticketNoGenerator.nextNo());
+        ticket.setTeamId(category.getDefaultTeamId());
+        ticket.setStatus(targetStatus.name());
+    }
+
+    private SearchCondition buildSearchCondition(TicketSearchRequest request) {
+        return new SearchCondition(
+                normalizeScope(request.getScope()),
+                request.normalizedTicketNo(),
+                request.normalizedKeyword(),
+                normalizeOptionalStatus(request.getStatus()),
+                normalizeOptionalPriority(request.getPriority()),
+                parseOptionalId(request.getCategoryId(), "工单分类ID"),
+                parseOptionalId(request.getCreatorId(), "创建人ID"),
+                parseOptionalId(request.getAssigneeId(), "处理人ID"),
+                parseOptionalId(request.getTeamId(), "处理团队ID"),
+                request.getOverdue() == null ? null : (request.getOverdue() ? 1 : 0),
+                parseOptionalDateTime(request.getCreatedFrom(), "创建开始时间"),
+                parseOptionalDateTime(request.getCreatedTo(), "创建结束时间")
+        );
+    }
+
+    private TicketStateContext buildStateContext(Ticket ticket, CurrentUser currentUser) {
+        boolean teamMember = ticket.getTeamId() != null
+                && teamMemberMapper.countActive(ticket.getTeamId(), requireUserId(currentUser)) > 0;
+        return TicketStateContext.of(
+                currentUser.getUserId(),
+                ticket.getCreatorId(),
+                ticket.getAssigneeId(),
+                Set.copyOf(currentUser.getRoles()),
+                teamMember
+        );
+    }
+
+    private TicketVO assembleTicketVO(Ticket ticket, CurrentUser currentUser) {
+        boolean watching = ticketWatchMapper.countActive(ticket.getId(), requireUserId(currentUser)) > 0;
+        return assembleTicketVO(ticket, watching);
+    }
+
+    private TicketVO assembleTicketVO(Ticket ticket, boolean watching) {
+        return ticketConverter.toVO(
+                ticket,
+                findCategory(ticket.getCategoryId()),
+                findUser(ticket.getCreatorId()),
+                findUser(ticket.getAssigneeId()),
+                findTeam(ticket.getTeamId()),
+                watching
+        );
+    }
+
+    private TicketListItemVO assembleTicketListItemVO(Ticket ticket) {
+        return ticketConverter.toListItem(
+                ticket,
+                findCategory(ticket.getCategoryId()),
+                findUser(ticket.getCreatorId()),
+                findUser(ticket.getAssigneeId()),
+                findTeam(ticket.getTeamId())
+        );
+    }
+
+    private void recordLog(Ticket ticket,
+                           String operationType,
+                           String fromStatus,
+                           String toStatus,
+                           Long operatorId,
+                           String content,
+                           String requestIp,
+                           String userAgent) {
+        TicketOperationLog log = new TicketOperationLog();
+        log.setId(idGenerator.nextId());
+        log.setTicketId(ticket.getId());
+        log.setOperationType(operationType);
+        log.setFromStatus(fromStatus);
+        log.setToStatus(toStatus);
+        log.setOperatorId(operatorId);
+        log.setContent(trimToNull(content));
+        log.setRequestIp(trimToNull(requestIp));
+        log.setUserAgent(trimToNull(userAgent));
+        log.setCreateBy(operatorId);
+        log.setUpdateBy(operatorId);
+        ticketOperationLogMapper.insert(log);
+    }
+
+    private Ticket loadTicket(Long ticketId) {
+        Ticket ticket = ticketMapper.findById(ticketId);
+        if (ticket == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "工单不存在");
+        }
+        return ticket;
+    }
+
+    private TicketCategory loadEnabledCategory(Long categoryId) {
+        TicketCategory category = ticketCategoryMapper.findById(categoryId);
+        if (category == null || category.getEnabled() == null || category.getEnabled() != 1) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "工单分类不存在或未启用");
+        }
+        return category;
+    }
+
+    private TicketCategory findCategory(Long categoryId) {
+        return categoryId == null ? null : ticketCategoryMapper.findById(categoryId);
+    }
+
+    private SysUser findUser(Long userId) {
+        return userId == null ? null : sysUserMapper.findById(userId);
+    }
+
+    private Team findTeam(Long teamId) {
+        return teamId == null || teamMapper == null ? null : teamMapper.findById(teamId);
+    }
+
+    private void updateTicket(Ticket ticket) {
+        if (ticketMapper.update(ticket) == 0) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "工单不存在");
+        }
+    }
+
+    private void ensureAccessible(Ticket ticket, CurrentUser currentUser) {
+        Long operatorId = requireUserId(currentUser);
+        if (hasRole(currentUser, ROLE_ADMIN)
+                || sameUser(operatorId, ticket.getCreatorId())
+                || sameUser(operatorId, ticket.getAssigneeId())
+                || isTeamMember(ticket.getTeamId(), operatorId)) {
+            return;
+        }
+        throw new BusinessException(ErrorCode.FORBIDDEN, "当前用户无权访问该工单");
+    }
+
+    private void ensureCreator(Ticket ticket, Long operatorId) {
+        if (!sameUser(ticket.getCreatorId(), operatorId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "仅创建人可编辑该工单");
+        }
+    }
+
+    private void ensureStatus(Ticket ticket, TicketStatus expectedStatus) {
+        if (parseStatus(ticket.getStatus()) != expectedStatus) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "当前状态不允许编辑");
+        }
+    }
+
+    private void ensureManagerScope(CurrentUser currentUser, Long teamId) {
+        if (hasRole(currentUser, ROLE_ADMIN) || !hasRole(currentUser, ROLE_MANAGER)) {
+            return;
+        }
+        if (teamId == null || !isTeamMember(teamId, currentUser.getUserId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "负责人只能操作所属团队工单");
+        }
+    }
+
+    private void ensureManagerScopeForClose(CurrentUser currentUser, Ticket ticket) {
+        if (hasRole(currentUser, ROLE_MANAGER) && !sameUser(currentUser.getUserId(), ticket.getCreatorId())) {
+            ensureManagerScope(currentUser, ticket.getTeamId());
+        }
+    }
+
+    private boolean isTeamMember(Long teamId, Long userId) {
+        return teamId != null && userId != null && teamMemberMapper.countActive(teamId, userId) > 0;
+    }
+
+    private boolean hasRole(CurrentUser currentUser, String role) {
+        return currentUser != null && currentUser.getRoles().contains(role);
+    }
+
+    private boolean sameUser(Long left, Long right) {
+        return left != null && left.equals(right);
+    }
+
+    private Long requireUserId(CurrentUser currentUser) {
+        if (currentUser == null || currentUser.getUserId() == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "用户未登录");
+        }
+        return currentUser.getUserId();
+    }
+
+    private Long parseRequiredId(String value, String fieldName) {
+        return IdParser.parseRequired(value, fieldName);
+    }
+
+    private Long parseOptionalId(String value, String fieldName) {
+        return StringUtils.hasText(value) ? IdParser.parseRequired(value, fieldName) : null;
+    }
+
+    private String normalizeRequiredText(String value, String fieldName) {
+        if (!StringUtils.hasText(value)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, fieldName + "不能为空");
+        }
+        return value.trim();
+    }
+
+    private String normalizePriority(String priority) {
+        String safePriority = StringUtils.hasText(priority) ? priority.trim().toUpperCase() : DEFAULT_PRIORITY;
+        if (!ALLOWED_PRIORITIES.contains(safePriority)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "工单优先级不正确");
+        }
+        return safePriority;
+    }
+
+    private String normalizeOptionalPriority(String priority) {
+        return StringUtils.hasText(priority) ? normalizePriority(priority) : null;
+    }
+
+    private String normalizeOptionalStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return null;
+        }
+        return parseStatus(status.trim().toUpperCase()).name();
+    }
+
+    private String normalizeScope(String scope) {
+        if (!StringUtils.hasText(scope)) {
+            return null;
+        }
+        String safeScope = scope.trim();
+        if (Set.of("created", "assigned", "watching").contains(safeScope)) {
+            return safeScope;
+        }
+        throw new BusinessException(ErrorCode.PARAM_ERROR, "工单查询范围不正确");
+    }
+
+    private String normalizeTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return null;
+        }
+        LinkedHashSet<String> normalizedTags = new LinkedHashSet<>();
+        for (String tag : tags) {
+            if (!StringUtils.hasText(tag)) {
+                continue;
+            }
+            String normalizedTag = tag.trim().replace(",", "");
+            if (normalizedTag.length() > MAX_TAG_LENGTH) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "单个标签不能超过30个字符");
+            }
+            normalizedTags.add(normalizedTag);
+        }
+        if (normalizedTags.size() > MAX_TAG_COUNT) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "工单标签不能超过20个");
+        }
+        return normalizedTags.isEmpty() ? null : String.join(",", normalizedTags);
+    }
+
+    private LocalDateTime resolveDueTime(String dueTime, TicketCategory category, LocalDateTime baseTime) {
+        LocalDateTime parsedDueTime = parseOptionalDateTime(dueTime, "截止时间");
+        if (parsedDueTime != null) {
+            return parsedDueTime;
+        }
+        return category.getDefaultSlaHours() == null ? null : baseTime.plusHours(category.getDefaultSlaHours());
+    }
+
+    private LocalDateTime parseOptionalDateTime(String value, String fieldName) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String text = value.trim();
+        try {
+            return text.contains("T") ? LocalDateTime.parse(text) : LocalDateTime.parse(text, DATE_TIME_FORMATTER);
+        } catch (DateTimeParseException exception) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, fieldName + "格式不正确");
+        }
+    }
+
+    private Integer resolveOverdue(LocalDateTime dueTime, LocalDateTime now) {
+        return dueTime != null && dueTime.isBefore(now) ? 1 : 0;
+    }
+
+    private TicketStatus parseStatus(String status) {
+        try {
+            return TicketStatus.valueOf(status);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "工单状态不正确");
+        }
+    }
+
+    private void ensureReason(String reason, String message) {
+        if (!StringUtils.hasText(reason)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, message);
+        }
+    }
+
+    private String contentOrDefault(String content, String defaultContent) {
+        return StringUtils.hasText(content) ? content.trim() : defaultContent;
+    }
+
+    private String trimToNull(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private String operationType(TicketAction action) {
+        return "TICKET_" + action.name();
+    }
+
+    private record SearchCondition(String scope,
+                                   String ticketNo,
+                                   String keyword,
+                                   String status,
+                                   String priority,
+                                   Long categoryId,
+                                   Long creatorId,
+                                   Long assigneeId,
+                                   Long teamId,
+                                   Integer overdue,
+                                   LocalDateTime createdFrom,
+                                   LocalDateTime createdTo) {
+    }
+}

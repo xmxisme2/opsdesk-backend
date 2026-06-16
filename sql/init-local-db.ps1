@@ -53,6 +53,7 @@ function Invoke-OpsDeskSqlFile {
 
 if (-not $SeedOnly) {
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "01_schema.sql")
+    Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "03_migrate_ticket_no_nullable.sql")
 }
 
 if (-not $SchemaOnly) {

@@ -1,0 +1,182 @@
+package com.opsdesk.ticket.service.impl;
+
+import com.opsdesk.common.exception.BusinessException;
+import com.opsdesk.common.exception.ErrorCode;
+import com.opsdesk.common.id.SnowflakeIdGenerator;
+import com.opsdesk.common.security.CurrentUser;
+import com.opsdesk.team.mapper.TeamMemberMapper;
+import com.opsdesk.ticket.dto.TicketCreateRequest;
+import com.opsdesk.ticket.entity.Ticket;
+import com.opsdesk.ticket.entity.TicketCategory;
+import com.opsdesk.ticket.entity.TicketOperationLog;
+import com.opsdesk.ticket.mapper.TicketCategoryMapper;
+import com.opsdesk.ticket.mapper.TicketMapper;
+import com.opsdesk.ticket.mapper.TicketOperationLogMapper;
+import com.opsdesk.ticket.mapper.TicketWatchMapper;
+import com.opsdesk.ticket.service.TicketNoGenerator;
+import com.opsdesk.ticket.service.TicketStateMachine;
+import com.opsdesk.ticket.vo.TicketVO;
+import com.opsdesk.user.mapper.SysUserMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/**
+ * 工单服务单元测试。
+ *
+ * <p>优先覆盖草稿编号口径和提交状态流转，防止创建接口提前生成工单编号。</p>
+ */
+@ExtendWith(MockitoExtension.class)
+class TicketServiceImplTest {
+
+    @Mock
+    private TicketMapper ticketMapper;
+
+    @Mock
+    private TicketCategoryMapper ticketCategoryMapper;
+
+    @Mock
+    private TicketOperationLogMapper ticketOperationLogMapper;
+
+    @Mock
+    private TicketWatchMapper ticketWatchMapper;
+
+    @Mock
+    private TeamMemberMapper teamMemberMapper;
+
+    @Mock
+    private SysUserMapper sysUserMapper;
+
+    @Mock
+    private TicketNoGenerator ticketNoGenerator;
+
+    private TicketServiceImpl ticketService;
+
+    @BeforeEach
+    void setUp() {
+        ticketService = new TicketServiceImpl(
+                ticketMapper,
+                ticketCategoryMapper,
+                ticketOperationLogMapper,
+                ticketWatchMapper,
+                teamMemberMapper,
+                sysUserMapper,
+                new SnowflakeIdGenerator(),
+                ticketNoGenerator,
+                new TicketStateMachine()
+        );
+    }
+
+    @Test
+    void createShouldKeepTicketNoNullForDraft() {
+        when(ticketCategoryMapper.findById(1L)).thenReturn(category());
+        TicketCreateRequest request = createRequest(false);
+
+        TicketVO ticketVO = ticketService.create(request, user(10L, "USER"), "127.0.0.1", "JUnit");
+
+        ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+        verify(ticketMapper).insert(ticketCaptor.capture());
+        assertThat(ticketCaptor.getValue().getTicketNo()).isNull();
+        assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("DRAFT");
+        assertThat(ticketVO.ticketNo()).isNull();
+        assertThat(ticketVO.status()).isEqualTo("DRAFT");
+        verify(ticketNoGenerator, never()).nextNo();
+        verify(ticketOperationLogMapper).insert(any(TicketOperationLog.class));
+    }
+
+    @Test
+    void createShouldGenerateTicketNoWhenSubmitNow() {
+        when(ticketCategoryMapper.findById(1L)).thenReturn(category());
+        when(ticketNoGenerator.nextNo()).thenReturn("TK202606160001");
+        TicketCreateRequest request = createRequest(true);
+
+        TicketVO ticketVO = ticketService.create(request, user(10L, "USER"), "127.0.0.1", "JUnit");
+
+        ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+        verify(ticketMapper).insert(ticketCaptor.capture());
+        assertThat(ticketCaptor.getValue().getTicketNo()).isEqualTo("TK202606160001");
+        assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("PENDING_ASSIGN");
+        assertThat(ticketVO.ticketNo()).isEqualTo("TK202606160001");
+        assertThat(ticketVO.status()).isEqualTo("PENDING_ASSIGN");
+    }
+
+    @Test
+    void submitShouldGenerateTicketNoAndMoveToPendingAssign() {
+        when(ticketMapper.findById(100L)).thenReturn(draftTicket(10L));
+        when(ticketCategoryMapper.findById(1L)).thenReturn(category());
+        when(ticketNoGenerator.nextNo()).thenReturn("TK202606160001");
+        when(ticketMapper.update(any(Ticket.class))).thenReturn(1);
+
+        TicketVO ticketVO = ticketService.submit("100", user(10L, "USER"), "127.0.0.1", "JUnit");
+
+        ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+        verify(ticketMapper).update(ticketCaptor.capture());
+        assertThat(ticketCaptor.getValue().getTicketNo()).isEqualTo("TK202606160001");
+        assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("PENDING_ASSIGN");
+        assertThat(ticketVO.ticketNo()).isEqualTo("TK202606160001");
+        assertThat(ticketVO.status()).isEqualTo("PENDING_ASSIGN");
+    }
+
+    @Test
+    void submitShouldRejectNonCreator() {
+        when(ticketMapper.findById(100L)).thenReturn(draftTicket(10L));
+
+        assertThatThrownBy(() -> ticketService.submit("100", user(20L, "USER"), "127.0.0.1", "JUnit"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FORBIDDEN);
+
+        verify(ticketMapper, never()).update(any());
+    }
+
+    private TicketCreateRequest createRequest(boolean submitNow) {
+        TicketCreateRequest request = new TicketCreateRequest();
+        request.setTitle("无法登录系统");
+        request.setDescription("登录时报错，请协助排查。");
+        request.setCategoryId("1");
+        request.setPriority("MEDIUM");
+        request.setTags(List.of("登录", "账号"));
+        request.setSubmitNow(submitNow);
+        return request;
+    }
+
+    private TicketCategory category() {
+        TicketCategory category = new TicketCategory();
+        category.setId(1L);
+        category.setName("账号问题");
+        category.setEnabled(1);
+        category.setDefaultSlaHours(24);
+        return category;
+    }
+
+    private Ticket draftTicket(Long creatorId) {
+        Ticket ticket = new Ticket();
+        ticket.setId(100L);
+        ticket.setTitle("无法登录系统");
+        ticket.setDescription("登录时报错，请协助排查。");
+        ticket.setCategoryId(1L);
+        ticket.setPriority("MEDIUM");
+        ticket.setStatus("DRAFT");
+        ticket.setCreatorId(creatorId);
+        ticket.setCreateTime(LocalDateTime.now());
+        ticket.setUpdateTime(LocalDateTime.now());
+        return ticket;
+    }
+
+    private CurrentUser user(Long userId, String role) {
+        return new CurrentUser(userId, "13800000000", "user" + userId, List.of(role), List.of());
+    }
+}

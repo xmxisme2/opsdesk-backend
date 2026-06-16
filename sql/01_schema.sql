@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS ticket_category (
 
 CREATE TABLE IF NOT EXISTS ticket (
   id BIGINT NOT NULL PRIMARY KEY COMMENT '主键',
-  ticket_no VARCHAR(64) NOT NULL COMMENT '工单编号',
+  ticket_no VARCHAR(64) NULL COMMENT '工单编号，草稿可为空，提交时生成',
   title VARCHAR(200) NOT NULL COMMENT '工单标题',
   description TEXT NOT NULL COMMENT '问题描述',
   category_id BIGINT NOT NULL COMMENT '分类 ID',
