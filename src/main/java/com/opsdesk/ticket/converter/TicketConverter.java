@@ -1,5 +1,6 @@
 package com.opsdesk.ticket.converter;
 
+import com.opsdesk.attachment.vo.AttachmentVO;
 import com.opsdesk.team.entity.Team;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.entity.TicketCategory;
@@ -34,6 +35,16 @@ public class TicketConverter {
                          SysUser assignee,
                          Team team,
                          boolean watching) {
+        return toVO(ticket, category, creator, assignee, team, watching, List.of());
+    }
+
+    public TicketVO toVO(Ticket ticket,
+                         TicketCategory category,
+                         SysUser creator,
+                         SysUser assignee,
+                         Team team,
+                         boolean watching,
+                         List<AttachmentVO> attachments) {
         return new TicketVO(
                 String.valueOf(ticket.getId()),
                 ticket.getTicketNo(),
@@ -55,7 +66,7 @@ public class TicketConverter {
                 ticket.getOverdue() != null && ticket.getOverdue() == 1,
                 splitTags(ticket.getTags()),
                 watching,
-                List.of(),
+                attachments == null ? List.of() : attachments,
                 format(ticket.getCreateTime()),
                 format(ticket.getUpdateTime())
         );

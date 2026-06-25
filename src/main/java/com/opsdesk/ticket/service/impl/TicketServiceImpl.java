@@ -1,5 +1,10 @@
 package com.opsdesk.ticket.service.impl;
 
+import com.opsdesk.attachment.converter.AttachmentConverter;
+import com.opsdesk.attachment.entity.Attachment;
+import com.opsdesk.attachment.mapper.AttachmentMapper;
+import com.opsdesk.attachment.service.AttachmentResourceAccessService;
+import com.opsdesk.attachment.vo.AttachmentVO;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
@@ -102,6 +107,8 @@ public class TicketServiceImpl implements TicketService {
     private final TicketStateMachine ticketStateMachine;
     private final TeamMapper teamMapper;
     private final TicketConverter ticketConverter;
+    private final AttachmentMapper attachmentMapper;
+    private final AttachmentConverter attachmentConverter;
 
     public TicketServiceImpl(TicketMapper ticketMapper,
                              TicketCategoryMapper ticketCategoryMapper,
@@ -113,7 +120,8 @@ public class TicketServiceImpl implements TicketService {
                              TicketNoGenerator ticketNoGenerator,
                              TicketStateMachine ticketStateMachine) {
         this(ticketMapper, ticketCategoryMapper, ticketOperationLogMapper, ticketWatchMapper, teamMemberMapper,
-                sysUserMapper, idGenerator, ticketNoGenerator, ticketStateMachine, null, new TicketConverter());
+                sysUserMapper, idGenerator, ticketNoGenerator, ticketStateMachine, null, new TicketConverter(),
+                null, new AttachmentConverter());
     }
 
     @Autowired
@@ -127,7 +135,9 @@ public class TicketServiceImpl implements TicketService {
                              TicketNoGenerator ticketNoGenerator,
                              TicketStateMachine ticketStateMachine,
                              TeamMapper teamMapper,
-                             TicketConverter ticketConverter) {
+                             TicketConverter ticketConverter,
+                             AttachmentMapper attachmentMapper,
+                             AttachmentConverter attachmentConverter) {
         this.ticketMapper = ticketMapper;
         this.ticketCategoryMapper = ticketCategoryMapper;
         this.ticketOperationLogMapper = ticketOperationLogMapper;
@@ -139,6 +149,8 @@ public class TicketServiceImpl implements TicketService {
         this.ticketStateMachine = ticketStateMachine;
         this.teamMapper = teamMapper;
         this.ticketConverter = ticketConverter;
+        this.attachmentMapper = attachmentMapper;
+        this.attachmentConverter = attachmentConverter;
     }
 
     @Override
@@ -575,7 +587,8 @@ public class TicketServiceImpl implements TicketService {
                 findUser(ticket.getCreatorId()),
                 findUser(ticket.getAssigneeId()),
                 findTeam(ticket.getTeamId()),
-                watching
+                watching,
+                findTicketAttachments(ticket.getId())
         );
     }
 
@@ -638,6 +651,19 @@ public class TicketServiceImpl implements TicketService {
 
     private Team findTeam(Long teamId) {
         return teamId == null || teamMapper == null ? null : teamMapper.findById(teamId);
+    }
+
+    private List<AttachmentVO> findTicketAttachments(Long ticketId) {
+        if (ticketId == null || attachmentMapper == null || attachmentConverter == null) {
+            return List.of();
+        }
+        List<Attachment> attachments = attachmentMapper.findByBiz(AttachmentResourceAccessService.BIZ_TYPE_TICKET, ticketId);
+        if (attachments == null || attachments.isEmpty()) {
+            return List.of();
+        }
+        return attachments.stream()
+                .map(attachmentConverter::toVO)
+                .toList();
     }
 
     private void updateTicket(Ticket ticket) {

@@ -217,7 +217,8 @@ CREATE TABLE IF NOT EXISTS ticket_comment (
 CREATE TABLE IF NOT EXISTS ticket_attachment (
   id BIGINT NOT NULL PRIMARY KEY COMMENT '主键',
   biz_type VARCHAR(32) NOT NULL COMMENT '业务类型',
-  biz_id BIGINT NOT NULL COMMENT '业务 ID',
+  biz_id BIGINT NULL COMMENT '业务 ID，临时附件为空',
+  temp_token VARCHAR(64) NULL COMMENT '临时附件令牌，绑定业务后清空',
   file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
   file_size BIGINT NOT NULL COMMENT '文件大小',
   content_type VARCHAR(128) NULL COMMENT 'MIME 类型',
@@ -233,6 +234,7 @@ CREATE TABLE IF NOT EXISTS ticket_attachment (
   update_by BIGINT NULL COMMENT '更新人 ID',
   deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0 正常，1 删除',
   KEY idx_ticket_attachment_biz_time (biz_type, biz_id, create_time),
+  KEY idx_ticket_attachment_temp (temp_token, uploader_id, deleted),
   KEY idx_ticket_attachment_uploader (uploader_id)
 ) COMMENT='附件元数据表';
 

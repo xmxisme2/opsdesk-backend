@@ -1,11 +1,15 @@
 package com.opsdesk.ticket.service.impl;
 
+import com.opsdesk.attachment.converter.AttachmentConverter;
+import com.opsdesk.attachment.entity.Attachment;
+import com.opsdesk.attachment.mapper.AttachmentMapper;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.team.mapper.TeamMemberMapper;
 import com.opsdesk.ticket.dto.TicketCreateRequest;
+import com.opsdesk.ticket.converter.TicketConverter;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.entity.TicketCategory;
 import com.opsdesk.ticket.entity.TicketOperationLog;
@@ -63,6 +67,9 @@ class TicketServiceImplTest {
     @Mock
     private TicketNoGenerator ticketNoGenerator;
 
+    @Mock
+    private AttachmentMapper attachmentMapper;
+
     private TicketServiceImpl ticketService;
 
     @BeforeEach
@@ -76,7 +83,11 @@ class TicketServiceImplTest {
                 sysUserMapper,
                 new SnowflakeIdGenerator(),
                 ticketNoGenerator,
-                new TicketStateMachine()
+                new TicketStateMachine(),
+                null,
+                new TicketConverter(),
+                attachmentMapper,
+                new AttachmentConverter()
         );
     }
 
@@ -142,6 +153,18 @@ class TicketServiceImplTest {
         verify(ticketMapper, never()).update(any());
     }
 
+    @Test
+    void detailShouldIncludeTicketAttachments() {
+        when(ticketMapper.findById(100L)).thenReturn(draftTicket(10L));
+        when(attachmentMapper.findByBiz("TICKET", 100L)).thenReturn(List.of(attachment()));
+
+        TicketVO ticketVO = ticketService.detail("100", user(10L, "USER"));
+
+        assertThat(ticketVO.attachments()).hasSize(1);
+        assertThat(ticketVO.attachments().get(0).id()).isEqualTo("500");
+        assertThat(ticketVO.attachments().get(0).downloadUrl()).isEqualTo("/api/files/500/download");
+    }
+
     private TicketCreateRequest createRequest(boolean submitNow) {
         TicketCreateRequest request = new TicketCreateRequest();
         request.setTitle("无法登录系统");
@@ -174,6 +197,25 @@ class TicketServiceImplTest {
         ticket.setCreateTime(LocalDateTime.now());
         ticket.setUpdateTime(LocalDateTime.now());
         return ticket;
+    }
+
+    private Attachment attachment() {
+        Attachment attachment = new Attachment();
+        attachment.setId(500L);
+        attachment.setBizType("TICKET");
+        attachment.setBizId(100L);
+        attachment.setFileName("note.txt");
+        attachment.setFileSize(5L);
+        attachment.setContentType("text/plain");
+        attachment.setExtension("txt");
+        attachment.setPreviewable(1);
+        attachment.setPreviewType("TEXT");
+        attachment.setDownloadOnly(0);
+        attachment.setStoragePath("2026/06/18/500.txt");
+        attachment.setUploaderId(10L);
+        attachment.setUploaderName("张三");
+        attachment.setCreateTime(LocalDateTime.of(2026, 6, 18, 10, 0));
+        return attachment;
     }
 
     private CurrentUser user(Long userId, String role) {
