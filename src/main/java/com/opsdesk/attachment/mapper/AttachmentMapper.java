@@ -72,6 +72,24 @@ public interface AttachmentMapper {
                                      @Param("tempToken") String tempToken,
                                      @Param("uploaderId") Long uploaderId);
 
+    @Update("""
+            UPDATE ticket_attachment
+            SET biz_id = #{bizId},
+                temp_token = NULL,
+                update_by = #{operatorId},
+                update_time = CURRENT_TIMESTAMP
+            WHERE biz_type = #{bizType}
+              AND biz_id IS NULL
+              AND temp_token = #{tempToken}
+              AND uploader_id = #{uploaderId}
+              AND deleted = 0
+            """)
+    int bindTempToBiz(@Param("bizType") String bizType,
+                      @Param("tempToken") String tempToken,
+                      @Param("uploaderId") Long uploaderId,
+                      @Param("bizId") Long bizId,
+                      @Param("operatorId") Long operatorId);
+
     @Select("""
             SELECT id
             FROM ticket
