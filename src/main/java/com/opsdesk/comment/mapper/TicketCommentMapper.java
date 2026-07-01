@@ -4,7 +4,6 @@ import com.opsdesk.comment.entity.TicketComment;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
@@ -27,50 +26,10 @@ public interface TicketCommentMapper {
             """)
     int insert(TicketComment comment);
 
-    @Select("""
-            SELECT c.*,
-                   COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone) AS author_name
-            FROM ticket_comment c
-            LEFT JOIN sys_user u ON u.id = c.author_id AND u.deleted = 0
-            WHERE c.id = #{id}
-              AND c.deleted = 0
-            LIMIT 1
-            """)
     TicketComment findById(@Param("id") Long id);
 
-    @Select("""
-            <script>
-            SELECT COUNT(1)
-            FROM ticket_comment
-            WHERE ticket_id = #{ticketId}
-              AND deleted = 0
-            <if test="includeInternal == false">
-              AND comment_type != 'INTERNAL'
-            </if>
-            </script>
-            """)
-    long countByTicketId(@Param("ticketId") Long ticketId,
-                         @Param("includeInternal") boolean includeInternal);
-
-    @Select("""
-            <script>
-            SELECT c.*,
-                   COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone) AS author_name
-            FROM ticket_comment c
-            LEFT JOIN sys_user u ON u.id = c.author_id AND u.deleted = 0
-            WHERE c.ticket_id = #{ticketId}
-              AND c.deleted = 0
-            <if test="includeInternal == false">
-              AND c.comment_type != 'INTERNAL'
-            </if>
-            ORDER BY c.create_time ASC, c.id ASC
-            LIMIT #{size} OFFSET #{offset}
-            </script>
-            """)
     List<TicketComment> searchByTicketId(@Param("ticketId") Long ticketId,
-                                         @Param("includeInternal") boolean includeInternal,
-                                         @Param("offset") long offset,
-                                         @Param("size") long size);
+                                         @Param("includeInternal") boolean includeInternal);
 
     @Update("""
             UPDATE ticket_comment

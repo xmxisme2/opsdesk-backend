@@ -4,7 +4,6 @@ import com.opsdesk.team.entity.TeamMember;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
@@ -17,90 +16,17 @@ import java.util.List;
 @Mapper
 public interface TeamMemberMapper {
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM team_member
-            WHERE team_id = #{teamId}
-              AND deleted = 0
-            """)
     long countMembers(@Param("teamId") Long teamId);
 
-    @Select("""
-            SELECT user_id
-            FROM team_member
-            WHERE team_id = #{teamId}
-              AND leader_flag = 1
-              AND deleted = 0
-            ORDER BY user_id
-            """)
     List<Long> findLeaderIdsByTeamId(@Param("teamId") Long teamId);
 
-    @Select("""
-            SELECT tm.user_id
-            FROM team_member tm
-            WHERE tm.team_id = #{teamId}
-              AND tm.deleted = 0
-            ORDER BY tm.user_id
-            """)
     List<Long> findActiveUserIdsByTeamId(@Param("teamId") Long teamId);
 
-    @Select("""
-            SELECT DISTINCT u.department_id
-            FROM team_member tm
-            INNER JOIN sys_user u ON u.id = tm.user_id
-            WHERE tm.team_id = #{teamId}
-              AND tm.deleted = 0
-              AND u.deleted = 0
-              AND u.department_id IS NOT NULL
-            ORDER BY u.department_id
-            """)
     List<Long> findDepartmentIdsByTeamId(@Param("teamId") Long teamId);
 
-    @Select("""
-            <script>
-            SELECT COUNT(1)
-            FROM team_member tm
-            INNER JOIN sys_user u ON u.id = tm.user_id AND u.deleted = 0
-            WHERE tm.team_id = #{teamId}
-              AND tm.deleted = 0
-            <if test="keyword != null and keyword != ''">
-              AND (u.phone LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.username LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.nickname LIKE CONCAT('%', #{keyword}, '%'))
-            </if>
-            </script>
-            """)
-    long countSearchMembers(@Param("teamId") Long teamId,
-                            @Param("keyword") String keyword);
-
-    @Select("""
-            <script>
-            SELECT tm.*
-            FROM team_member tm
-            INNER JOIN sys_user u ON u.id = tm.user_id AND u.deleted = 0
-            WHERE tm.team_id = #{teamId}
-              AND tm.deleted = 0
-            <if test="keyword != null and keyword != ''">
-              AND (u.phone LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.username LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.nickname LIKE CONCAT('%', #{keyword}, '%'))
-            </if>
-            ORDER BY tm.leader_flag DESC, tm.create_time ASC, tm.user_id ASC
-            LIMIT #{size} OFFSET #{offset}
-            </script>
-            """)
     List<TeamMember> searchMembers(@Param("teamId") Long teamId,
-                                   @Param("keyword") String keyword,
-                                   @Param("offset") long offset,
-                                   @Param("size") long size);
+                                   @Param("keyword") String keyword);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM team_member
-            WHERE team_id = #{teamId}
-              AND user_id = #{userId}
-              AND deleted = 0
-            """)
     int countActive(@Param("teamId") Long teamId,
                     @Param("userId") Long userId);
 

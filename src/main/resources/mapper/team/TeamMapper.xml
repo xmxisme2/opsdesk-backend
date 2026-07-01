@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.team.mapper.TeamMapper">
+
+    <!-- 团队基础字段：列表和详情显式选择，避免表结构扩展时误返回未知字段。 -->
+    <sql id="TeamColumns">
+        id, name, description, processing_scope, enabled, create_time, update_time, create_by, update_by, deleted
+    </sql>
+
+    <select id="findById" resultType="com.opsdesk.team.entity.Team">
+        SELECT <include refid="TeamColumns"/>
+        FROM team
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="countByName" resultType="int">
+        SELECT COUNT(1)
+        FROM team
+        WHERE name = #{name}
+          AND deleted = 0
+    </select>
+
+    <select id="countByNameExcludeId" resultType="int">
+        SELECT COUNT(1)
+        FROM team
+        WHERE name = #{name}
+          AND id != #{excludeId}
+          AND deleted = 0
+    </select>
+
+    <select id="countOpenTickets" resultType="int">
+        SELECT COUNT(1)
+        FROM ticket
+        WHERE team_id = #{teamId}
+          AND deleted = 0
+          AND status NOT IN ('CLOSED', 'CANCELLED')
+    </select>
+
+    <select id="search" resultType="com.opsdesk.team.entity.Team">
+        SELECT DISTINCT t.id, t.name, t.description, t.processing_scope, t.enabled,
+               t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
+        FROM team t
+        <if test="departmentId != null">
+          INNER JOIN team_member tm ON tm.team_id = t.id AND tm.deleted = 0
+          INNER JOIN sys_user u ON u.id = tm.user_id AND u.deleted = 0
+        </if>
+        WHERE t.deleted = 0
+        <if test="keyword != null and keyword != ''">
+          AND (t.name LIKE CONCAT('%', #{keyword}, '%')
+               OR t.description LIKE CONCAT('%', #{keyword}, '%')
+               OR t.processing_scope LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="departmentId != null">
+          AND u.department_id = #{departmentId}
+        </if>
+        <if test="enabled != null">
+          AND t.enabled = #{enabled}
+        </if>
+        ORDER BY t.create_time DESC, t.id DESC
+    </select>
+</mapper>

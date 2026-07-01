@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.user.mapper.SysUserMapper">
+
+    <!-- 用户基础字段：不包含任何星号查询，避免密码等字段调整时误扩大查询范围。 -->
+    <sql id="SysUserColumns">
+        id, phone, password_hash, username, nickname, email, gender, avatar_code, avatar_url,
+        department_id, status, create_time, update_time, create_by, update_by, deleted
+    </sql>
+
+    <select id="findByPhone" resultType="com.opsdesk.user.entity.SysUser">
+        SELECT <include refid="SysUserColumns"/>
+        FROM sys_user
+        WHERE phone = #{phone}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="findByUsername" resultType="com.opsdesk.user.entity.SysUser">
+        SELECT <include refid="SysUserColumns"/>
+        FROM sys_user
+        WHERE username = #{username}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="findById" resultType="com.opsdesk.user.entity.SysUser">
+        SELECT <include refid="SysUserColumns"/>
+        FROM sys_user
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="countByPhone" resultType="int">
+        SELECT COUNT(1)
+        FROM sys_user
+        WHERE phone = #{phone}
+          AND deleted = 0
+    </select>
+
+    <select id="countByUsername" resultType="int">
+        SELECT COUNT(1)
+        FROM sys_user
+        WHERE username = #{username}
+          AND deleted = 0
+    </select>
+
+    <select id="countByPhoneExcludeId" resultType="int">
+        SELECT COUNT(1)
+        FROM sys_user
+        WHERE phone = #{phone}
+          AND id &lt;&gt; #{excludeId}
+          AND deleted = 0
+    </select>
+
+    <select id="countByUsernameExcludeId" resultType="int">
+        SELECT COUNT(1)
+        FROM sys_user
+        WHERE username = #{username}
+          AND id &lt;&gt; #{excludeId}
+          AND deleted = 0
+    </select>
+
+    <select id="countByDepartmentId" resultType="int">
+        SELECT COUNT(1)
+        FROM sys_user
+        WHERE department_id = #{departmentId}
+          AND deleted = 0
+    </select>
+
+    <select id="search" resultType="com.opsdesk.user.entity.SysUser">
+        SELECT DISTINCT u.id, u.phone, u.password_hash, u.username, u.nickname, u.email, u.gender,
+               u.avatar_code, u.avatar_url, u.department_id, u.status, u.create_time, u.update_time,
+               u.create_by, u.update_by, u.deleted
+        FROM sys_user u
+        <if test="roleCode != null and roleCode != ''">
+          INNER JOIN sys_user_role ur ON ur.user_id = u.id AND ur.deleted = 0
+          INNER JOIN sys_role r ON r.id = ur.role_id AND r.deleted = 0 AND r.enabled = 1
+        </if>
+        WHERE u.deleted = 0
+        <if test="keyword != null and keyword != ''">
+          AND (u.phone LIKE CONCAT('%', #{keyword}, '%')
+               OR u.username LIKE CONCAT('%', #{keyword}, '%')
+               OR u.nickname LIKE CONCAT('%', #{keyword}, '%')
+               OR u.email LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="departmentId != null">
+          AND u.department_id = #{departmentId}
+        </if>
+        <if test="roleCode != null and roleCode != ''">
+          AND r.code = #{roleCode}
+        </if>
+        <if test="status != null and status != ''">
+          AND u.status = #{status}
+        </if>
+        ORDER BY u.create_time DESC, u.id DESC
+    </select>
+</mapper>

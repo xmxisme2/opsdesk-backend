@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.ticket.mapper.TicketMapper">
+
+    <!-- 工单基础字段：列表、详情共用，SLA/状态字段显式列出。 -->
+    <sql id="TicketColumns">
+        id, ticket_no, title, description, category_id, priority, status, creator_id, assignee_id,
+        team_id, due_time, completed_time, closed_time, overdue, tags, create_time, update_time,
+        create_by, update_by, deleted
+    </sql>
+
+    <select id="findById" resultType="com.opsdesk.ticket.entity.Ticket">
+        SELECT <include refid="TicketColumns"/>
+        FROM ticket
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="countByTicketNo" resultType="int">
+        SELECT COUNT(1)
+        FROM ticket
+        WHERE ticket_no = #{ticketNo}
+          AND deleted = 0
+    </select>
+
+    <select id="countByCategoryId" resultType="int">
+        SELECT COUNT(1)
+        FROM ticket
+        WHERE category_id = #{categoryId}
+          AND deleted = 0
+    </select>
+
+    <select id="search" resultType="com.opsdesk.ticket.entity.Ticket">
+        SELECT t.id, t.ticket_no, t.title, t.description, t.category_id, t.priority, t.status,
+               t.creator_id, t.assignee_id, t.team_id, t.due_time, t.completed_time, t.closed_time,
+               t.overdue, t.tags, t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
+        FROM ticket t
+        WHERE t.deleted = 0
+          AND (
+            #{admin} = TRUE
+            OR t.creator_id = #{currentUserId}
+            OR t.assignee_id = #{currentUserId}
+            OR EXISTS (
+              SELECT 1
+              FROM team_member tm
+              WHERE tm.team_id = t.team_id
+                AND tm.user_id = #{currentUserId}
+                AND tm.deleted = 0
+            )
+          )
+        <if test="'created'.equals(scope)">
+          AND t.creator_id = #{currentUserId}
+        </if>
+        <if test="'assigned'.equals(scope)">
+          AND t.assignee_id = #{currentUserId}
+        </if>
+        <if test="'watching'.equals(scope)">
+          AND EXISTS (
+            SELECT 1
+            FROM ticket_watch tw
+            WHERE tw.ticket_id = t.id
+              AND tw.user_id = #{currentUserId}
+              AND tw.deleted = 0
+          )
+        </if>
+        <if test="ticketNo != null and ticketNo != ''">
+          AND t.ticket_no LIKE CONCAT('%', #{ticketNo}, '%')
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND (t.title LIKE CONCAT('%', #{keyword}, '%')
+               OR t.description LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="status != null and status != ''">
+          AND t.status = #{status}
+        </if>
+        <if test="priority != null and priority != ''">
+          AND t.priority = #{priority}
+        </if>
+        <if test="categoryId != null">
+          AND t.category_id = #{categoryId}
+        </if>
+        <if test="creatorId != null">
+          AND t.creator_id = #{creatorId}
+        </if>
+        <if test="assigneeId != null">
+          AND t.assignee_id = #{assigneeId}
+        </if>
+        <if test="teamId != null">
+          AND t.team_id = #{teamId}
+        </if>
+        <if test="overdue != null">
+          AND t.overdue = #{overdue}
+        </if>
+        <if test="createdFrom != null">
+          AND t.create_time &gt;= #{createdFrom}
+        </if>
+        <if test="createdTo != null">
+          AND t.create_time &lt;= #{createdTo}
+        </if>
+        ORDER BY t.create_time DESC, t.id DESC
+    </select>
+</mapper>

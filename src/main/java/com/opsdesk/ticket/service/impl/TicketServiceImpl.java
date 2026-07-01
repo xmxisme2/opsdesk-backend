@@ -8,6 +8,7 @@ import com.opsdesk.attachment.vo.AttachmentVO;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
+import com.opsdesk.common.pagination.PageHelperPageResult;
 import com.opsdesk.common.pagination.PageQuery;
 import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.security.CurrentUser;
@@ -223,27 +224,17 @@ public class TicketServiceImpl implements TicketService {
     public PageResult<TicketListItemVO> search(TicketSearchRequest request, CurrentUser currentUser) {
         Long currentUserId = requireUserId(currentUser);
         TicketSearchRequest safeRequest = request == null ? new TicketSearchRequest() : request;
-        long page = safeRequest.normalizedPage();
-        long size = safeRequest.normalizedSize();
         SearchCondition condition = buildSearchCondition(safeRequest);
         boolean admin = hasRole(currentUser, ROLE_ADMIN);
 
-        long total = ticketMapper.countSearch(condition.scope(), condition.ticketNo(), condition.keyword(),
-                condition.status(), condition.priority(), condition.categoryId(), condition.creatorId(),
-                condition.assigneeId(), condition.teamId(), condition.overdue(), condition.createdFrom(),
-                condition.createdTo(), currentUserId, admin);
-        if (total == 0) {
-            return PageResult.empty(page, size);
-        }
-        long offset = (page - 1) * size;
-        List<TicketListItemVO> records = ticketMapper.search(condition.scope(), condition.ticketNo(), condition.keyword(),
+        return PageHelperPageResult.selectPage(
+                safeRequest,
+                () -> ticketMapper.search(condition.scope(), condition.ticketNo(), condition.keyword(),
                         condition.status(), condition.priority(), condition.categoryId(), condition.creatorId(),
                         condition.assigneeId(), condition.teamId(), condition.overdue(), condition.createdFrom(),
-                        condition.createdTo(), currentUserId, admin, offset, size)
-                .stream()
-                .map(this::assembleTicketListItemVO)
-                .toList();
-        return new PageResult<>(records, page, size, total);
+                        condition.createdTo(), currentUserId, admin),
+                this::assembleTicketListItemVO
+        );
     }
 
     @Override
@@ -524,18 +515,11 @@ public class TicketServiceImpl implements TicketService {
         Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
         ensureAccessible(ticket, currentUser);
         PageQuery safeRequest = request == null ? new PageQuery() : request;
-        long page = safeRequest.normalizedPage();
-        long size = safeRequest.normalizedSize();
-        long total = ticketOperationLogMapper.countByTicketId(ticket.getId());
-        if (total == 0) {
-            return PageResult.empty(page, size);
-        }
-        long offset = (page - 1) * size;
-        List<TicketOperationLogVO> records = ticketOperationLogMapper.searchByTicketId(ticket.getId(), offset, size)
-                .stream()
-                .map(log -> ticketConverter.toOperationLogVO(log, findUser(log.getOperatorId())))
-                .toList();
-        return new PageResult<>(records, page, size, total);
+        return PageHelperPageResult.selectPage(
+                safeRequest,
+                () -> ticketOperationLogMapper.searchByTicketId(ticket.getId()),
+                log -> ticketConverter.toOperationLogVO(log, findUser(log.getOperatorId()))
+        );
     }
 
     private void submitNewTicket(Ticket ticket, TicketCategory category, CurrentUser currentUser) {

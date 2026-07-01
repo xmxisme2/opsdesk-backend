@@ -3,7 +3,6 @@ package com.opsdesk.user.mapper;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
@@ -29,39 +28,12 @@ public interface UserRoleMapper {
                @Param("roleId") Long roleId,
                @Param("operatorId") Long operatorId);
 
-    @Select("""
-            SELECT role_id
-            FROM sys_user_role
-            WHERE user_id = #{userId}
-              AND deleted = 0
-            ORDER BY role_id
-            """)
     List<Long> findRoleIdsByUserId(@Param("userId") Long userId);
 
-    @Select("""
-            SELECT user_id
-            FROM sys_user_role
-            WHERE role_id = #{roleId}
-              AND deleted = 0
-            ORDER BY user_id
-            """)
     List<Long> findUserIdsByRoleId(@Param("roleId") Long roleId);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM sys_user_role
-            WHERE role_id = #{roleId}
-              AND deleted = 0
-            """)
     int countActiveByRoleId(@Param("roleId") Long roleId);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM sys_user_role
-            WHERE user_id = #{userId}
-              AND role_id = #{roleId}
-              AND deleted = 0
-            """)
     int countActive(@Param("userId") Long userId,
                     @Param("roleId") Long roleId);
 

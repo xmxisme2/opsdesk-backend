@@ -100,14 +100,12 @@ class TicketCommentServiceImplTest {
     @Test
     void searchShouldHideInternalCommentsForCreatorUser() {
         when(ticketMapper.findById(100L)).thenReturn(ticket(10L, 20L, 30L));
-        when(commentMapper.countByTicketId(100L, false)).thenReturn(1L);
-        when(commentMapper.searchByTicketId(100L, false, 0L, 20L)).thenReturn(List.of(publicComment()));
+        when(commentMapper.searchByTicketId(100L, false)).thenReturn(List.of(publicComment()));
 
         PageResult<?> result = commentService.search("100", new CommentSearchRequest(), user(10L, "USER"));
 
         assertThat(result.total()).isEqualTo(1);
-        verify(commentMapper).countByTicketId(100L, false);
-        verify(commentMapper).searchByTicketId(100L, false, 0L, 20L);
+        verify(commentMapper).searchByTicketId(100L, false);
     }
 
     @Test

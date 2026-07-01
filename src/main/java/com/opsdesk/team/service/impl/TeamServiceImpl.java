@@ -4,6 +4,7 @@ import com.opsdesk.audit.service.AuditLogService;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
+import com.opsdesk.common.pagination.PageHelperPageResult;
 import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.util.IdParser;
 import com.opsdesk.department.entity.Department;
@@ -102,21 +103,14 @@ public class TeamServiceImpl implements TeamService {
     @Override
     public PageResult<TeamVO> search(TeamSearchRequest request) {
         TeamSearchRequest safeRequest = request == null ? new TeamSearchRequest() : request;
-        long page = safeRequest.normalizedPage();
-        long size = safeRequest.normalizedSize();
         Long departmentId = parseOptionalId(safeRequest.getDepartmentId(), "部门ID");
         Integer enabled = safeRequest.getEnabled() == null ? null : (safeRequest.getEnabled() ? 1 : 0);
 
-        long total = teamMapper.countSearch(safeRequest.normalizedKeyword(), departmentId, enabled);
-        if (total == 0) {
-            return PageResult.empty(page, size);
-        }
-        long offset = (page - 1) * size;
-        List<TeamVO> records = teamMapper.search(safeRequest.normalizedKeyword(), departmentId, enabled, offset, size)
-                .stream()
-                .map(this::assembleTeamVO)
-                .toList();
-        return new PageResult<>(records, page, size, total);
+        return PageHelperPageResult.selectPage(
+                safeRequest,
+                () -> teamMapper.search(safeRequest.normalizedKeyword(), departmentId, enabled),
+                this::assembleTeamVO
+        );
     }
 
     @Override
@@ -196,18 +190,11 @@ public class TeamServiceImpl implements TeamService {
         Long teamId = IdParser.parseRequired(id, "团队ID");
         loadTeam(teamId);
         TeamMemberSearchRequest safeRequest = request == null ? new TeamMemberSearchRequest() : request;
-        long page = safeRequest.normalizedPage();
-        long size = safeRequest.normalizedSize();
-        long total = teamMemberMapper.countSearchMembers(teamId, safeRequest.normalizedKeyword());
-        if (total == 0) {
-            return PageResult.empty(page, size);
-        }
-        long offset = (page - 1) * size;
-        List<TeamMemberVO> records = teamMemberMapper.searchMembers(teamId, safeRequest.normalizedKeyword(), offset, size)
-                .stream()
-                .map(this::assembleMemberVO)
-                .toList();
-        return new PageResult<>(records, page, size, total);
+        return PageHelperPageResult.selectPage(
+                safeRequest,
+                () -> teamMemberMapper.searchMembers(teamId, safeRequest.normalizedKeyword()),
+                this::assembleMemberVO
+        );
     }
 
     @Override

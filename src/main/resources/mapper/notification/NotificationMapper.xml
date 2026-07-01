@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.notification.mapper.NotificationMapper">
+
+    <!-- 通知基础字段：查询固定返回实体字段，分页由 PageHelper 统一追加。 -->
+    <sql id="NotificationColumns">
+        id, receiver_id, type, title, content, biz_type, biz_id, read_status, read_time,
+        create_time, update_time, create_by, update_by, deleted
+    </sql>
+
+    <select id="findById" resultType="com.opsdesk.notification.entity.Notification">
+        SELECT <include refid="NotificationColumns"/>
+        FROM notification
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="search" resultType="com.opsdesk.notification.entity.Notification">
+        SELECT <include refid="NotificationColumns"/>
+        FROM notification
+        WHERE receiver_id = #{receiverId}
+          AND deleted = 0
+        <if test="read != null">
+          AND read_status = CASE WHEN #{read} = TRUE THEN 1 ELSE 0 END
+        </if>
+        <if test="type != null and type != ''">
+          AND type = #{type}
+        </if>
+        <if test="createdFrom != null">
+          AND create_time &gt;= #{createdFrom}
+        </if>
+        <if test="createdTo != null">
+          AND create_time &lt;= #{createdTo}
+        </if>
+        ORDER BY create_time DESC, id DESC
+    </select>
+
+    <select id="countUnread" resultType="long">
+        SELECT COUNT(1)
+        FROM notification
+        WHERE receiver_id = #{receiverId}
+          AND read_status = 0
+          AND deleted = 0
+    </select>
+</mapper>

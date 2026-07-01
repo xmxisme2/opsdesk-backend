@@ -5,6 +5,7 @@ import com.opsdesk.auth.service.TokenService;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
+import com.opsdesk.common.pagination.PageHelperPageResult;
 import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.util.IdParser;
 import com.opsdesk.department.entity.Department;
@@ -142,23 +143,15 @@ public class UserManagementServiceImpl implements UserManagementService {
     @Override
     public PageResult<UserVO> search(UserSearchRequest request) {
         UserSearchRequest safeRequest = request == null ? new UserSearchRequest() : request;
-        long page = safeRequest.normalizedPage();
-        long size = safeRequest.normalizedSize();
         Long departmentId = parseOptionalId(safeRequest.getDepartmentId(), "部门ID");
         String roleCode = safeRequest.normalizedRoleCode();
         String status = normalizeOptionalStatus(safeRequest.normalizedStatus());
 
-        long total = sysUserMapper.countSearch(safeRequest.normalizedKeyword(), departmentId, roleCode, status);
-        if (total == 0) {
-            return PageResult.empty(page, size);
-        }
-
-        long offset = (page - 1) * size;
-        List<UserVO> records = sysUserMapper.search(safeRequest.normalizedKeyword(), departmentId, roleCode, status, offset, size)
-                .stream()
-                .map(user -> assembleUserVO(user))
-                .toList();
-        return new PageResult<>(records, page, size, total);
+        return PageHelperPageResult.selectPage(
+                safeRequest,
+                () -> sysUserMapper.search(safeRequest.normalizedKeyword(), departmentId, roleCode, status),
+                this::assembleUserVO
+        );
     }
 
     @Override

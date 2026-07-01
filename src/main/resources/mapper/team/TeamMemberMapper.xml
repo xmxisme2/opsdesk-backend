@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.team.mapper.TeamMemberMapper">
+
+    <!-- 团队成员基础字段：成员分页查询显式返回关系表字段。 -->
+    <sql id="TeamMemberColumns">
+        id, team_id, user_id, member_role, leader_flag, create_time, update_time, create_by, update_by, deleted
+    </sql>
+
+    <select id="countMembers" resultType="long">
+        SELECT COUNT(1)
+        FROM team_member
+        WHERE team_id = #{teamId}
+          AND deleted = 0
+    </select>
+
+    <select id="findLeaderIdsByTeamId" resultType="long">
+        SELECT user_id
+        FROM team_member
+        WHERE team_id = #{teamId}
+          AND leader_flag = 1
+          AND deleted = 0
+        ORDER BY user_id
+    </select>
+
+    <select id="findActiveUserIdsByTeamId" resultType="long">
+        SELECT tm.user_id
+        FROM team_member tm
+        WHERE tm.team_id = #{teamId}
+          AND tm.deleted = 0
+        ORDER BY tm.user_id
+    </select>
+
+    <select id="findDepartmentIdsByTeamId" resultType="long">
+        SELECT DISTINCT u.department_id
+        FROM team_member tm
+        INNER JOIN sys_user u ON u.id = tm.user_id
+        WHERE tm.team_id = #{teamId}
+          AND tm.deleted = 0
+          AND u.deleted = 0
+          AND u.department_id IS NOT NULL
+        ORDER BY u.department_id
+    </select>
+
+    <select id="searchMembers" resultType="com.opsdesk.team.entity.TeamMember">
+        SELECT tm.id, tm.team_id, tm.user_id, tm.member_role, tm.leader_flag,
+               tm.create_time, tm.update_time, tm.create_by, tm.update_by, tm.deleted
+        FROM team_member tm
+        INNER JOIN sys_user u ON u.id = tm.user_id AND u.deleted = 0
+        WHERE tm.team_id = #{teamId}
+          AND tm.deleted = 0
+        <if test="keyword != null and keyword != ''">
+          AND (u.phone LIKE CONCAT('%', #{keyword}, '%')
+               OR u.username LIKE CONCAT('%', #{keyword}, '%')
+               OR u.nickname LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY tm.leader_flag DESC, tm.create_time ASC, tm.user_id ASC
+    </select>
+
+    <select id="countActive" resultType="int">
+        SELECT COUNT(1)
+        FROM team_member
+        WHERE team_id = #{teamId}
+          AND user_id = #{userId}
+          AND deleted = 0
+    </select>
+</mapper>

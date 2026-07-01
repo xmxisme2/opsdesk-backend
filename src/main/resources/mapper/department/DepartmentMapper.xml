@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.department.mapper.DepartmentMapper">
+
+    <!-- 部门基础字段：组织树读取显式列字段，避免后续扩展字段自动暴露。 -->
+    <sql id="DepartmentColumns">
+        id, parent_id, name, leader_id, sort, enabled, create_time, update_time, create_by, update_by, deleted
+    </sql>
+
+    <select id="findById" resultType="com.opsdesk.department.entity.Department">
+        SELECT <include refid="DepartmentColumns"/>
+        FROM sys_department
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="findEnabledById" resultType="com.opsdesk.department.entity.Department">
+        SELECT <include refid="DepartmentColumns"/>
+        FROM sys_department
+        WHERE id = #{id}
+          AND enabled = 1
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="searchTree" resultType="com.opsdesk.department.entity.Department">
+        SELECT <include refid="DepartmentColumns"/>
+        FROM sys_department
+        WHERE deleted = 0
+        <if test="keyword != null and keyword != ''">
+          AND name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        <if test="enabled != null">
+          AND enabled = #{enabled}
+        </if>
+        ORDER BY sort ASC, id ASC
+    </select>
+
+    <select id="countByParentAndName" resultType="int">
+        SELECT COUNT(1)
+        FROM sys_department
+        WHERE deleted = 0
+          AND name = #{name}
+        <choose>
+          <when test="parentId == null">
+            AND parent_id IS NULL
+          </when>
+          <otherwise>
+            AND parent_id = #{parentId}
+          </otherwise>
+        </choose>
+        <if test="excludeId != null">
+          AND id != #{excludeId}
+        </if>
+    </select>
+
+    <select id="countChildren" resultType="int">
+        SELECT COUNT(1)
+        FROM sys_department
+        WHERE parent_id = #{parentId}
+          AND deleted = 0
+    </select>
+
+    <select id="findDescendantIds" resultType="long">
+        WITH RECURSIVE department_tree AS (
+          SELECT id
+          FROM sys_department
+          WHERE parent_id = #{departmentId}
+            AND deleted = 0
+          UNION ALL
+          SELECT d.id
+          FROM sys_department d
+          INNER JOIN department_tree dt ON d.parent_id = dt.id
+          WHERE d.deleted = 0
+        )
+        SELECT id
+        FROM department_tree
+    </select>
+</mapper>

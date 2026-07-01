@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.comment.mapper.TicketCommentMapper">
+
+    <!-- 评论基础字段：额外 author_name 仅用于 VO 展示，不参与写入。 -->
+    <select id="findById" resultType="com.opsdesk.comment.entity.TicketComment">
+        SELECT c.id, c.ticket_id, c.content, c.comment_type, c.author_id,
+               COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone) AS author_name,
+               c.create_time, c.update_time, c.create_by, c.update_by, c.deleted
+        FROM ticket_comment c
+        LEFT JOIN sys_user u ON u.id = c.author_id AND u.deleted = 0
+        WHERE c.id = #{id}
+          AND c.deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="searchByTicketId" resultType="com.opsdesk.comment.entity.TicketComment">
+        SELECT c.id, c.ticket_id, c.content, c.comment_type, c.author_id,
+               COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone) AS author_name,
+               c.create_time, c.update_time, c.create_by, c.update_by, c.deleted
+        FROM ticket_comment c
+        LEFT JOIN sys_user u ON u.id = c.author_id AND u.deleted = 0
+        WHERE c.ticket_id = #{ticketId}
+          AND c.deleted = 0
+        <if test="includeInternal == false">
+          AND c.comment_type != 'INTERNAL'
+        </if>
+        ORDER BY c.create_time ASC, c.id ASC
+    </select>
+</mapper>

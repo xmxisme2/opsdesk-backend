@@ -4,7 +4,6 @@ import com.opsdesk.notification.entity.Notification;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDateTime;
@@ -30,78 +29,14 @@ public interface NotificationMapper {
             """)
     int insert(Notification notification);
 
-    @Select("""
-            SELECT *
-            FROM notification
-            WHERE id = #{id}
-              AND deleted = 0
-            LIMIT 1
-            """)
     Notification findById(@Param("id") Long id);
 
-    @Select("""
-            <script>
-            SELECT COUNT(1)
-            FROM notification
-            WHERE receiver_id = #{receiverId}
-              AND deleted = 0
-            <if test="read != null">
-              AND read_status = CASE WHEN #{read} = TRUE THEN 1 ELSE 0 END
-            </if>
-            <if test="type != null and type != ''">
-              AND type = #{type}
-            </if>
-            <if test="createdFrom != null">
-              AND create_time &gt;= #{createdFrom}
-            </if>
-            <if test="createdTo != null">
-              AND create_time &lt;= #{createdTo}
-            </if>
-            </script>
-            """)
-    long countSearch(@Param("receiverId") Long receiverId,
-                     @Param("read") Boolean read,
-                     @Param("type") String type,
-                     @Param("createdFrom") LocalDateTime createdFrom,
-                     @Param("createdTo") LocalDateTime createdTo);
-
-    @Select("""
-            <script>
-            SELECT *
-            FROM notification
-            WHERE receiver_id = #{receiverId}
-              AND deleted = 0
-            <if test="read != null">
-              AND read_status = CASE WHEN #{read} = TRUE THEN 1 ELSE 0 END
-            </if>
-            <if test="type != null and type != ''">
-              AND type = #{type}
-            </if>
-            <if test="createdFrom != null">
-              AND create_time &gt;= #{createdFrom}
-            </if>
-            <if test="createdTo != null">
-              AND create_time &lt;= #{createdTo}
-            </if>
-            ORDER BY create_time DESC, id DESC
-            LIMIT #{size} OFFSET #{offset}
-            </script>
-            """)
     List<Notification> search(@Param("receiverId") Long receiverId,
                               @Param("read") Boolean read,
                               @Param("type") String type,
                               @Param("createdFrom") LocalDateTime createdFrom,
-                              @Param("createdTo") LocalDateTime createdTo,
-                              @Param("offset") long offset,
-                              @Param("size") long size);
+                              @Param("createdTo") LocalDateTime createdTo);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM notification
-            WHERE receiver_id = #{receiverId}
-              AND read_status = 0
-              AND deleted = 0
-            """)
     long countUnread(@Param("receiverId") Long receiverId);
 
     @Update("""

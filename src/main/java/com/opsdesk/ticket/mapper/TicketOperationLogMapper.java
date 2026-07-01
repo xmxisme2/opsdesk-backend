@@ -4,7 +4,6 @@ import com.opsdesk.ticket.entity.TicketOperationLog;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
@@ -28,23 +27,5 @@ public interface TicketOperationLogMapper {
             """)
     int insert(TicketOperationLog log);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM ticket_operation_log
-            WHERE ticket_id = #{ticketId}
-              AND deleted = 0
-            """)
-    long countByTicketId(@Param("ticketId") Long ticketId);
-
-    @Select("""
-            SELECT *
-            FROM ticket_operation_log
-            WHERE ticket_id = #{ticketId}
-              AND deleted = 0
-            ORDER BY create_time DESC, id DESC
-            LIMIT #{size} OFFSET #{offset}
-            """)
-    List<TicketOperationLog> searchByTicketId(@Param("ticketId") Long ticketId,
-                                              @Param("offset") long offset,
-                                              @Param("size") long size);
+    List<TicketOperationLog> searchByTicketId(@Param("ticketId") Long ticketId);
 }

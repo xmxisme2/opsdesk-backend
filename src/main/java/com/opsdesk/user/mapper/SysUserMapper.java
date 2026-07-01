@@ -4,7 +4,6 @@ import com.opsdesk.user.entity.SysUser;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
@@ -17,142 +16,28 @@ import java.util.List;
 @Mapper
 public interface SysUserMapper {
 
-    @Select("""
-            SELECT *
-            FROM sys_user
-            WHERE phone = #{phone}
-              AND deleted = 0
-            LIMIT 1
-            """)
     SysUser findByPhone(@Param("phone") String phone);
 
-    @Select("""
-            SELECT *
-            FROM sys_user
-            WHERE username = #{username}
-              AND deleted = 0
-            LIMIT 1
-            """)
     SysUser findByUsername(@Param("username") String username);
 
-    @Select("""
-            SELECT *
-            FROM sys_user
-            WHERE id = #{id}
-              AND deleted = 0
-            LIMIT 1
-            """)
     SysUser findById(@Param("id") Long id);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM sys_user
-            WHERE phone = #{phone}
-              AND deleted = 0
-            """)
     int countByPhone(@Param("phone") String phone);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM sys_user
-            WHERE username = #{username}
-              AND deleted = 0
-            """)
     int countByUsername(@Param("username") String username);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM sys_user
-            WHERE phone = #{phone}
-              AND id <> #{excludeId}
-              AND deleted = 0
-            """)
     int countByPhoneExcludeId(@Param("phone") String phone,
                               @Param("excludeId") Long excludeId);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM sys_user
-            WHERE username = #{username}
-              AND id <> #{excludeId}
-              AND deleted = 0
-            """)
     int countByUsernameExcludeId(@Param("username") String username,
                                  @Param("excludeId") Long excludeId);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM sys_user
-            WHERE department_id = #{departmentId}
-              AND deleted = 0
-            """)
     int countByDepartmentId(@Param("departmentId") Long departmentId);
 
-    @Select("""
-            <script>
-            SELECT COUNT(DISTINCT u.id)
-            FROM sys_user u
-            <if test="roleCode != null and roleCode != ''">
-              INNER JOIN sys_user_role ur ON ur.user_id = u.id AND ur.deleted = 0
-              INNER JOIN sys_role r ON r.id = ur.role_id AND r.deleted = 0 AND r.enabled = 1
-            </if>
-            WHERE u.deleted = 0
-            <if test="keyword != null and keyword != ''">
-              AND (u.phone LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.username LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.nickname LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.email LIKE CONCAT('%', #{keyword}, '%'))
-            </if>
-            <if test="departmentId != null">
-              AND u.department_id = #{departmentId}
-            </if>
-            <if test="roleCode != null and roleCode != ''">
-              AND r.code = #{roleCode}
-            </if>
-            <if test="status != null and status != ''">
-              AND u.status = #{status}
-            </if>
-            </script>
-            """)
-    long countSearch(@Param("keyword") String keyword,
-                     @Param("departmentId") Long departmentId,
-                     @Param("roleCode") String roleCode,
-                     @Param("status") String status);
-
-    @Select("""
-            <script>
-            SELECT DISTINCT u.*
-            FROM sys_user u
-            <if test="roleCode != null and roleCode != ''">
-              INNER JOIN sys_user_role ur ON ur.user_id = u.id AND ur.deleted = 0
-              INNER JOIN sys_role r ON r.id = ur.role_id AND r.deleted = 0 AND r.enabled = 1
-            </if>
-            WHERE u.deleted = 0
-            <if test="keyword != null and keyword != ''">
-              AND (u.phone LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.username LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.nickname LIKE CONCAT('%', #{keyword}, '%')
-                   OR u.email LIKE CONCAT('%', #{keyword}, '%'))
-            </if>
-            <if test="departmentId != null">
-              AND u.department_id = #{departmentId}
-            </if>
-            <if test="roleCode != null and roleCode != ''">
-              AND r.code = #{roleCode}
-            </if>
-            <if test="status != null and status != ''">
-              AND u.status = #{status}
-            </if>
-            ORDER BY u.create_time DESC, u.id DESC
-            LIMIT #{size} OFFSET #{offset}
-            </script>
-            """)
     List<SysUser> search(@Param("keyword") String keyword,
                          @Param("departmentId") Long departmentId,
                          @Param("roleCode") String roleCode,
-                         @Param("status") String status,
-                         @Param("offset") long offset,
-                         @Param("size") long size);
+                         @Param("status") String status);
 
     @Insert("""
             INSERT INTO sys_user (

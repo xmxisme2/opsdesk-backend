@@ -2,6 +2,7 @@ package com.opsdesk.notification.service.impl;
 
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
+import com.opsdesk.common.pagination.PageHelperPageResult;
 import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.common.util.IdParser;
@@ -74,23 +75,15 @@ public class NotificationServiceImpl implements NotificationService {
     public PageResult<NotificationVO> search(NotificationSearchRequest request, CurrentUser currentUser) {
         Long receiverId = requireUserId(currentUser);
         NotificationSearchRequest safeRequest = request == null ? new NotificationSearchRequest() : request;
-        long page = safeRequest.normalizedPage();
-        long size = safeRequest.normalizedSize();
         String type = normalizeOptionalType(safeRequest.getType());
         LocalDateTime createdFrom = parseOptionalDateTime(safeRequest.getCreatedFrom(), "创建开始时间");
         LocalDateTime createdTo = parseOptionalDateTime(safeRequest.getCreatedTo(), "创建结束时间");
 
-        long total = notificationMapper.countSearch(receiverId, safeRequest.getRead(), type, createdFrom, createdTo);
-        if (total == 0) {
-            return PageResult.empty(page, size);
-        }
-        long offset = (page - 1) * size;
-        List<NotificationVO> records = notificationMapper.search(receiverId, safeRequest.getRead(), type,
-                        createdFrom, createdTo, offset, size)
-                .stream()
-                .map(notificationConverter::toVO)
-                .toList();
-        return new PageResult<>(records, page, size, total);
+        return PageHelperPageResult.selectPage(
+                safeRequest,
+                () -> notificationMapper.search(receiverId, safeRequest.getRead(), type, createdFrom, createdTo),
+                notificationConverter::toVO
+        );
     }
 
     @Override

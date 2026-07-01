@@ -4,7 +4,6 @@ import com.opsdesk.ticket.entity.TicketWatch;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 /**
@@ -15,13 +14,6 @@ import org.apache.ibatis.annotations.Update;
 @Mapper
 public interface TicketWatchMapper {
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM ticket_watch
-            WHERE ticket_id = #{ticketId}
-              AND user_id = #{userId}
-              AND deleted = 0
-            """)
     int countActive(@Param("ticketId") Long ticketId,
                     @Param("userId") Long userId);
 

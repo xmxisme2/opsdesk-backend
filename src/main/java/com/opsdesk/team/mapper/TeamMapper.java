@@ -4,7 +4,6 @@ import com.opsdesk.team.entity.Team;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
@@ -17,97 +16,18 @@ import java.util.List;
 @Mapper
 public interface TeamMapper {
 
-    @Select("""
-            SELECT *
-            FROM team
-            WHERE id = #{id}
-              AND deleted = 0
-            LIMIT 1
-            """)
     Team findById(@Param("id") Long id);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM team
-            WHERE name = #{name}
-              AND deleted = 0
-            """)
     int countByName(@Param("name") String name);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM team
-            WHERE name = #{name}
-              AND id != #{excludeId}
-              AND deleted = 0
-            """)
     int countByNameExcludeId(@Param("name") String name,
                              @Param("excludeId") Long excludeId);
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM ticket
-            WHERE team_id = #{teamId}
-              AND deleted = 0
-              AND status NOT IN ('CLOSED', 'CANCELLED')
-            """)
     int countOpenTickets(@Param("teamId") Long teamId);
 
-    @Select("""
-            <script>
-            SELECT COUNT(DISTINCT t.id)
-            FROM team t
-            <if test="departmentId != null">
-              INNER JOIN team_member tm ON tm.team_id = t.id AND tm.deleted = 0
-              INNER JOIN sys_user u ON u.id = tm.user_id AND u.deleted = 0
-            </if>
-            WHERE t.deleted = 0
-            <if test="keyword != null and keyword != ''">
-              AND (t.name LIKE CONCAT('%', #{keyword}, '%')
-                   OR t.description LIKE CONCAT('%', #{keyword}, '%')
-                   OR t.processing_scope LIKE CONCAT('%', #{keyword}, '%'))
-            </if>
-            <if test="departmentId != null">
-              AND u.department_id = #{departmentId}
-            </if>
-            <if test="enabled != null">
-              AND t.enabled = #{enabled}
-            </if>
-            </script>
-            """)
-    long countSearch(@Param("keyword") String keyword,
-                     @Param("departmentId") Long departmentId,
-                     @Param("enabled") Integer enabled);
-
-    @Select("""
-            <script>
-            SELECT DISTINCT t.*
-            FROM team t
-            <if test="departmentId != null">
-              INNER JOIN team_member tm ON tm.team_id = t.id AND tm.deleted = 0
-              INNER JOIN sys_user u ON u.id = tm.user_id AND u.deleted = 0
-            </if>
-            WHERE t.deleted = 0
-            <if test="keyword != null and keyword != ''">
-              AND (t.name LIKE CONCAT('%', #{keyword}, '%')
-                   OR t.description LIKE CONCAT('%', #{keyword}, '%')
-                   OR t.processing_scope LIKE CONCAT('%', #{keyword}, '%'))
-            </if>
-            <if test="departmentId != null">
-              AND u.department_id = #{departmentId}
-            </if>
-            <if test="enabled != null">
-              AND t.enabled = #{enabled}
-            </if>
-            ORDER BY t.create_time DESC, t.id DESC
-            LIMIT #{size} OFFSET #{offset}
-            </script>
-            """)
     List<Team> search(@Param("keyword") String keyword,
                       @Param("departmentId") Long departmentId,
-                      @Param("enabled") Integer enabled,
-                      @Param("offset") long offset,
-                      @Param("size") long size);
+                      @Param("enabled") Integer enabled);
 
     @Insert("""
             INSERT INTO team (

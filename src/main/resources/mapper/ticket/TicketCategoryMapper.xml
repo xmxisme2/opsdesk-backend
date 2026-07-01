@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.ticket.mapper.TicketCategoryMapper">
+
+    <!-- 工单分类基础字段：包含默认团队和默认 SLA 小时数。 -->
+    <sql id="TicketCategoryColumns">
+        id, parent_id, name, default_team_id, default_sla_hours, sort, enabled,
+        create_time, update_time, create_by, update_by, deleted
+    </sql>
+
+    <select id="findById" resultType="com.opsdesk.ticket.entity.TicketCategory">
+        SELECT <include refid="TicketCategoryColumns"/>
+        FROM ticket_category
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="searchTree" resultType="com.opsdesk.ticket.entity.TicketCategory">
+        SELECT <include refid="TicketCategoryColumns"/>
+        FROM ticket_category
+        WHERE deleted = 0
+        <if test="enabled != null">
+          AND enabled = #{enabled}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        ORDER BY parent_id ASC, sort ASC, id ASC
+    </select>
+</mapper>

@@ -25,6 +25,11 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 
+pagehelper:
+  helper-dialect: mysql
+  reasonable: false
+  support-methods-arguments: false
+
 springdoc:
   api-docs:
     path: /v3/api-docs

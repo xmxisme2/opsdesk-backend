@@ -4,6 +4,7 @@ import com.opsdesk.audit.service.AuditLogService;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
+import com.opsdesk.common.pagination.PageHelperPageResult;
 import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.util.IdParser;
 import com.opsdesk.permission.entity.Permission;
@@ -71,21 +72,14 @@ public class RoleServiceImpl implements RoleService {
     @Override
     public PageResult<RoleVO> search(RoleSearchRequest request) {
         RoleSearchRequest safeRequest = request == null ? new RoleSearchRequest() : request;
-        long page = safeRequest.normalizedPage();
-        long size = safeRequest.normalizedSize();
         String keyword = safeRequest.normalizedKeyword();
         Integer enabled = safeRequest.getEnabled() == null ? null : (safeRequest.getEnabled() ? 1 : 0);
 
-        long total = roleMapper.countSearch(keyword, enabled);
-        if (total == 0) {
-            return PageResult.empty(page, size);
-        }
-        long offset = (page - 1) * size;
-        List<RoleVO> records = roleMapper.search(keyword, enabled, offset, size)
-                .stream()
-                .map(role -> roleConverter.toVO(role, permissionMapper.findIdsByRoleId(role.getId())))
-                .toList();
-        return new PageResult<>(records, page, size, total);
+        return PageHelperPageResult.selectPage(
+                safeRequest,
+                () -> roleMapper.search(keyword, enabled),
+                role -> roleConverter.toVO(role, permissionMapper.findIdsByRoleId(role.getId()))
+        );
     }
 
     @Override

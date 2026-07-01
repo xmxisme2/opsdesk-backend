@@ -16,6 +16,7 @@ import com.opsdesk.comment.vo.CommentVO;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
+import com.opsdesk.common.pagination.PageHelperPageResult;
 import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.common.util.IdParser;
@@ -164,19 +165,12 @@ public class TicketCommentServiceImpl implements TicketCommentService {
     public PageResult<CommentVO> search(String ticketId, CommentSearchRequest request, CurrentUser currentUser) {
         Ticket ticket = requireAccessibleTicket(parseRequiredId(ticketId, "工单ID"), currentUser);
         CommentSearchRequest safeRequest = request == null ? new CommentSearchRequest() : request;
-        long page = safeRequest.normalizedPage();
-        long size = safeRequest.normalizedSize();
         boolean includeInternal = canViewInternalComment(ticket, currentUser);
-        long total = commentMapper.countByTicketId(ticket.getId(), includeInternal);
-        if (total == 0) {
-            return PageResult.empty(page, size);
-        }
-        long offset = (page - 1) * size;
-        List<CommentVO> records = commentMapper.searchByTicketId(ticket.getId(), includeInternal, offset, size)
-                .stream()
-                .map(this::assembleCommentVO)
-                .toList();
-        return new PageResult<>(records, page, size, total);
+        return PageHelperPageResult.selectPage(
+                safeRequest,
+                () -> commentMapper.searchByTicketId(ticket.getId(), includeInternal),
+                this::assembleCommentVO
+        );
     }
 
     @Override

@@ -53,13 +53,12 @@ class NotificationServiceImplTest {
     void searchShouldOnlyReturnCurrentUserNotifications() {
         NotificationSearchRequest request = new NotificationSearchRequest();
         request.setRead(false);
-        when(notificationMapper.countSearch(10L, false, null, null, null)).thenReturn(1L);
-        when(notificationMapper.search(10L, false, null, null, null, 0L, 20L)).thenReturn(List.of(notification(100L, 10L)));
+        when(notificationMapper.search(10L, false, null, null, null)).thenReturn(List.of(notification(100L, 10L)));
 
         PageResult<?> result = notificationService.search(request, user(10L));
 
         assertThat(result.total()).isEqualTo(1);
-        verify(notificationMapper).search(10L, false, null, null, null, 0L, 20L);
+        verify(notificationMapper).search(10L, false, null, null, null);
     }
 
     @Test

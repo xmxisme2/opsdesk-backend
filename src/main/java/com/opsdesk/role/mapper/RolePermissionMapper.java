@@ -3,7 +3,6 @@ package com.opsdesk.role.mapper;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
@@ -16,13 +15,6 @@ import java.util.List;
 @Mapper
 public interface RolePermissionMapper {
 
-    @Select("""
-            SELECT COUNT(1)
-            FROM sys_role_permission
-            WHERE role_id = #{roleId}
-              AND permission_id = #{permissionId}
-              AND deleted = 0
-            """)
     int countActive(@Param("roleId") Long roleId,
                     @Param("permissionId") Long permissionId);
 
