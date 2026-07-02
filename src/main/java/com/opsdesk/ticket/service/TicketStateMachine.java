@@ -50,8 +50,8 @@ public class TicketStateMachine {
             case SUBMIT, CONFIRM, REOPEN -> context.isCreator();
             case CANCEL -> context.isCreator() || (currentStatus == TicketStatus.PENDING_ASSIGN && context.isAdmin());
             case ASSIGN -> context.isManagerOrAdmin();
-            case ACCEPT, TRANSFER -> context.isAgentOrAbove()
-                    && (context.isCurrentAssignee() || context.isTeamMember() || context.isManagerOrAdmin());
+            case ACCEPT, TRANSFER -> context.isCurrentAssignee()
+                    || (context.isAgentOrAbove() && (context.isTeamMember() || context.isManagerOrAdmin()));
             case REJECT -> currentStatus == TicketStatus.PENDING_ASSIGN
                     ? context.isManagerOrAdmin()
                     : context.isCurrentAssignee();

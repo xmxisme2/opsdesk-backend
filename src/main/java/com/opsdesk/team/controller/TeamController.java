@@ -116,8 +116,9 @@ public class TeamController {
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.USER)
     public ApiResponse<PageResult<TeamMemberVO>> searchMembers(@PathVariable String id,
-                                                               @RequestBody(required = false) TeamMemberSearchRequest request) {
-        return ApiResponse.success(teamService.searchMembers(id, request));
+                                                               @RequestBody(required = false) TeamMemberSearchRequest request,
+                                                               @AuthenticationPrincipal CurrentUser currentUser) {
+        return ApiResponse.success(teamService.searchMembers(id, request, currentUser));
     }
 
     @PostMapping("/{id}/members/update")

@@ -6,6 +6,7 @@ import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
 import com.opsdesk.common.pagination.PageHelperPageResult;
 import com.opsdesk.common.response.PageResult;
+import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.common.util.IdParser;
 import com.opsdesk.department.entity.Department;
 import com.opsdesk.department.mapper.DepartmentMapper;
@@ -30,10 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 团队管理服务实现。
@@ -42,6 +40,12 @@ import java.util.Set;
  */
 @Service
 public class TeamServiceImpl implements TeamService {
+
+    /** 管理员角色编码：允许查看所有团队成员，外部请求体传入无效。 */
+    private static final String ROLE_ADMIN = "ADMIN";
+
+    /** 团队负责人角色编码：仅允许查看自己负责团队的成员列表，外部请求体传入无效。 */
+    private static final String ROLE_MANAGER = "MANAGER";
 
     /** 团队审计业务类型：团队创建、编辑、删除和成员变更统一归入 TEAM。 */
     private static final String BIZ_TYPE_TEAM = "TEAM";
@@ -186,9 +190,10 @@ public class TeamServiceImpl implements TeamService {
     }
 
     @Override
-    public PageResult<TeamMemberVO> searchMembers(String id, TeamMemberSearchRequest request) {
+    public PageResult<TeamMemberVO> searchMembers(String id, TeamMemberSearchRequest request, CurrentUser currentUser) {
         Long teamId = IdParser.parseRequired(id, "团队ID");
         loadTeam(teamId);
+        ensureMemberSearchScope(teamId, currentUser);
         TeamMemberSearchRequest safeRequest = request == null ? new TeamMemberSearchRequest() : request;
         return PageHelperPageResult.selectPage(
                 safeRequest,
@@ -241,7 +246,7 @@ public class TeamServiceImpl implements TeamService {
         loadTeam(teamId);
         List<Long> leaderIds = parseRequiredLeaderIds(request == null ? null : request.getLeaderIds());
         List<Long> activeMemberIds = teamMemberMapper.findActiveUserIdsByTeamId(teamId);
-        if (!activeMemberIds.containsAll(leaderIds)) {
+        if (!new HashSet<>(activeMemberIds).containsAll(leaderIds)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "负责人必须是团队成员");
         }
         teamMemberMapper.resetLeaders(teamId, operatorId);
@@ -305,6 +310,17 @@ public class TeamServiceImpl implements TeamService {
             throw new BusinessException(ErrorCode.NOT_FOUND, "团队不存在");
         }
         return team;
+    }
+
+    private void ensureMemberSearchScope(Long teamId, CurrentUser currentUser) {
+        if (currentUser != null && currentUser.getRoles().contains(ROLE_ADMIN)) {
+            return;
+        }
+        if (currentUser == null
+                || !currentUser.getRoles().contains(ROLE_MANAGER)
+                || teamMemberMapper.countLeader(teamId, currentUser.getUserId()) == 0) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "团队负责人只能查看自己负责团队的成员");
+        }
     }
 
     private List<Long> parseRequiredLeaderIds(List<String> leaderIdValues) {

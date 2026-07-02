@@ -8,6 +8,7 @@ import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.team.mapper.TeamMemberMapper;
+import com.opsdesk.ticket.dto.TicketAssignRequest;
 import com.opsdesk.ticket.dto.TicketCreateRequest;
 import com.opsdesk.ticket.converter.TicketConverter;
 import com.opsdesk.ticket.entity.Ticket;
@@ -165,6 +166,61 @@ class TicketServiceImplTest {
         assertThat(ticketVO.attachments().get(0).downloadUrl()).isEqualTo("/api/files/500/download");
     }
 
+    @Test
+    void detailShouldReturnAcceptActionForAssignedUserWithoutAgentRole() {
+        when(ticketMapper.findById(100L)).thenReturn(pendingProcessTicket(10L, 20L));
+
+        TicketVO ticketVO = ticketService.detail("100", user(20L, "USER"));
+
+        assertThat(ticketVO.availableActions()).containsExactly("accept", "transfer");
+    }
+
+    @Test
+    void acceptShouldAllowAssignedUserWithoutAgentRole() {
+        when(ticketMapper.findById(100L)).thenReturn(pendingProcessTicket(10L, 20L));
+        when(ticketMapper.update(any(Ticket.class))).thenReturn(1);
+
+        TicketVO ticketVO = ticketService.accept("100", user(20L, "USER"), "127.0.0.1", "JUnit");
+
+        ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+        verify(ticketMapper).update(ticketCaptor.capture());
+        assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("PROCESSING");
+        assertThat(ticketCaptor.getValue().getAssigneeId()).isEqualTo(20L);
+        assertThat(ticketVO.status()).isEqualTo("PROCESSING");
+        assertThat(ticketVO.availableActions()).containsExactly("transfer", "reject", "complete");
+    }
+
+    @Test
+    void assignShouldAllowTeamOnlyWithoutAssignee() {
+        when(ticketMapper.findById(100L)).thenReturn(pendingAssignTicket(10L, null));
+        when(ticketMapper.update(any(Ticket.class))).thenReturn(1);
+        TicketAssignRequest request = assignRequest("2", null);
+
+        TicketVO ticketVO = ticketService.assign("100", request, user(1L, "ADMIN"), "127.0.0.1", "JUnit");
+
+        ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+        verify(ticketMapper).update(ticketCaptor.capture());
+        assertThat(ticketCaptor.getValue().getTeamId()).isEqualTo(2L);
+        assertThat(ticketCaptor.getValue().getAssigneeId()).isNull();
+        assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("PENDING_PROCESS");
+        assertThat(ticketVO.teamId()).isEqualTo("2");
+        assertThat(ticketVO.assigneeId()).isNull();
+    }
+
+    @Test
+    void assignShouldRejectAssigneeOutsideSelectedTeam() {
+        when(ticketMapper.findById(100L)).thenReturn(pendingAssignTicket(10L, null));
+        when(teamMemberMapper.countActive(2L, 30L)).thenReturn(0);
+        TicketAssignRequest request = assignRequest("2", "30");
+
+        assertThatThrownBy(() -> ticketService.assign("100", request, user(1L, "ADMIN"), "127.0.0.1", "JUnit"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PARAM_ERROR);
+
+        verify(ticketMapper, never()).update(any());
+    }
+
     private TicketCreateRequest createRequest(boolean submitNow) {
         TicketCreateRequest request = new TicketCreateRequest();
         request.setTitle("无法登录系统");
@@ -197,6 +253,31 @@ class TicketServiceImplTest {
         ticket.setCreateTime(LocalDateTime.now());
         ticket.setUpdateTime(LocalDateTime.now());
         return ticket;
+    }
+
+    private Ticket pendingAssignTicket(Long creatorId, Long teamId) {
+        Ticket ticket = draftTicket(creatorId);
+        ticket.setTicketNo("TK202606160001");
+        ticket.setStatus("PENDING_ASSIGN");
+        ticket.setTeamId(teamId);
+        return ticket;
+    }
+
+    private Ticket pendingProcessTicket(Long creatorId, Long assigneeId) {
+        Ticket ticket = draftTicket(creatorId);
+        ticket.setTicketNo("TK202606160001");
+        ticket.setStatus("PENDING_PROCESS");
+        ticket.setTeamId(1L);
+        ticket.setAssigneeId(assigneeId);
+        return ticket;
+    }
+
+    private TicketAssignRequest assignRequest(String teamId, String assigneeId) {
+        TicketAssignRequest request = new TicketAssignRequest();
+        request.setTeamId(teamId);
+        request.setAssigneeId(assigneeId);
+        request.setReason("assign by team");
+        return request;
     }
 
     private Attachment attachment() {

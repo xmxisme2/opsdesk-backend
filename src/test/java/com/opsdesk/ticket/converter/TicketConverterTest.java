@@ -27,9 +27,10 @@ class TicketConverterTest {
                 "/api/files/500/download", "10", "张三", "2026-06-18 10:00:00"
         );
 
-        TicketVO result = converter.toVO(ticket(), null, null, null, null, false, List.of(attachment));
+        TicketVO result = converter.toVO(ticket(), null, null, null, null, false, List.of(attachment), List.of("accept"));
 
         assertThat(result.attachments()).containsExactly(attachment);
+        assertThat(result.availableActions()).containsExactly("accept");
     }
 
     private Ticket ticket() {

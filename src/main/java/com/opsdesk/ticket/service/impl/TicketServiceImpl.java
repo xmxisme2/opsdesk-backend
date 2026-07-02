@@ -55,6 +55,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -243,7 +244,7 @@ public class TicketServiceImpl implements TicketService {
         Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
         ensureAccessible(ticket, currentUser);
         boolean watching = ticketWatchMapper.countActive(ticket.getId(), currentUserId) > 0;
-        return assembleTicketVO(ticket, watching);
+        return assembleTicketVO(ticket, currentUser, watching);
     }
 
     @Override
@@ -284,11 +285,13 @@ public class TicketServiceImpl implements TicketService {
         if (teamId == null && assigneeId == null) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "处理团队和处理人至少需要填写一个");
         }
-        ensureManagerScope(currentUser, teamId == null ? ticket.getTeamId() : teamId);
+        Long finalTeamId = teamId == null ? ticket.getTeamId() : teamId;
+        ensureAssignmentScope(currentUser, ticket.getTeamId(), finalTeamId);
+        ensureAssigneeInTeam(finalTeamId, assigneeId);
         String fromStatus = ticket.getStatus();
         TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.ASSIGN,
                 buildStateContext(ticket, currentUser));
-        ticket.setTeamId(teamId == null ? ticket.getTeamId() : teamId);
+        ticket.setTeamId(finalTeamId);
         ticket.setAssigneeId(assigneeId);
         ticket.setStatus(targetStatus.name());
         ticket.setUpdateBy(operatorId);
@@ -355,11 +358,13 @@ public class TicketServiceImpl implements TicketService {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "目标团队和目标处理人至少需要填写一个");
         }
         ensureReason(request == null ? null : request.getReason(), "转派原因不能为空");
-        ensureManagerScope(currentUser, targetTeamId == null ? ticket.getTeamId() : targetTeamId);
+        Long finalTeamId = targetTeamId == null ? ticket.getTeamId() : targetTeamId;
+        ensureAssignmentScope(currentUser, ticket.getTeamId(), finalTeamId);
+        ensureAssigneeInTeam(finalTeamId, targetAssigneeId);
         String fromStatus = ticket.getStatus();
         TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.TRANSFER,
                 buildStateContext(ticket, currentUser));
-        ticket.setTeamId(targetTeamId == null ? ticket.getTeamId() : targetTeamId);
+        ticket.setTeamId(finalTeamId);
         ticket.setAssigneeId(targetAssigneeId);
         ticket.setStatus(targetStatus.name());
         ticket.setUpdateBy(operatorId);
@@ -561,10 +566,10 @@ public class TicketServiceImpl implements TicketService {
 
     private TicketVO assembleTicketVO(Ticket ticket, CurrentUser currentUser) {
         boolean watching = ticketWatchMapper.countActive(ticket.getId(), requireUserId(currentUser)) > 0;
-        return assembleTicketVO(ticket, watching);
+        return assembleTicketVO(ticket, currentUser, watching);
     }
 
-    private TicketVO assembleTicketVO(Ticket ticket, boolean watching) {
+    private TicketVO assembleTicketVO(Ticket ticket, CurrentUser currentUser, boolean watching) {
         return ticketConverter.toVO(
                 ticket,
                 findCategory(ticket.getCategoryId()),
@@ -572,8 +577,49 @@ public class TicketServiceImpl implements TicketService {
                 findUser(ticket.getAssigneeId()),
                 findTeam(ticket.getTeamId()),
                 watching,
-                findTicketAttachments(ticket.getId())
+                findTicketAttachments(ticket.getId()),
+                resolveAvailableActions(ticket, currentUser)
         );
+    }
+
+    private List<String> resolveAvailableActions(Ticket ticket, CurrentUser currentUser) {
+        if (ticket == null || currentUser == null || currentUser.getUserId() == null) {
+            return List.of();
+        }
+        TicketStatus currentStatus = parseStatus(ticket.getStatus());
+        TicketStateContext context = buildStateContext(ticket, currentUser);
+        return candidateActions(currentStatus).stream()
+                .filter(action -> canExecute(currentStatus, action, context))
+                .map(this::actionCode)
+                .toList();
+    }
+
+    /**
+     * 可用动作只列出当前状态可能出现的详情页按钮，具体权限继续复用状态机校验。
+     */
+    private List<TicketAction> candidateActions(TicketStatus currentStatus) {
+        return switch (currentStatus) {
+            case DRAFT -> List.of(TicketAction.SUBMIT, TicketAction.CANCEL);
+            case PENDING_ASSIGN -> List.of(TicketAction.ASSIGN, TicketAction.REJECT, TicketAction.CANCEL);
+            case PENDING_PROCESS -> List.of(TicketAction.ACCEPT, TicketAction.TRANSFER);
+            case PROCESSING -> List.of(TicketAction.TRANSFER, TicketAction.REJECT, TicketAction.COMPLETE);
+            case PENDING_CONFIRM -> List.of(TicketAction.CONFIRM, TicketAction.REOPEN);
+            case COMPLETED -> List.of(TicketAction.CLOSE);
+            case CLOSED, CANCELLED -> List.of();
+        };
+    }
+
+    private boolean canExecute(TicketStatus currentStatus, TicketAction action, TicketStateContext context) {
+        try {
+            ticketStateMachine.nextStatus(currentStatus, action, context);
+            return true;
+        } catch (BusinessException exception) {
+            return false;
+        }
+    }
+
+    private String actionCode(TicketAction action) {
+        return action.name().toLowerCase(Locale.ROOT);
     }
 
     private TicketListItemVO assembleTicketListItemVO(Ticket ticket) {
@@ -683,8 +729,27 @@ public class TicketServiceImpl implements TicketService {
         if (hasRole(currentUser, ROLE_ADMIN) || !hasRole(currentUser, ROLE_MANAGER)) {
             return;
         }
-        if (teamId == null || !isTeamMember(teamId, currentUser.getUserId())) {
+        if (teamId == null || !isTeamLeader(teamId, currentUser.getUserId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "负责人只能操作所属团队工单");
+        }
+    }
+
+    private void ensureAssignmentScope(CurrentUser currentUser, Long currentTeamId, Long targetTeamId) {
+        ensureManagerScope(currentUser, currentTeamId == null ? targetTeamId : currentTeamId);
+        if (targetTeamId != null && currentTeamId != null && !targetTeamId.equals(currentTeamId)) {
+            ensureManagerScope(currentUser, targetTeamId);
+        }
+    }
+
+    private void ensureAssigneeInTeam(Long teamId, Long assigneeId) {
+        if (assigneeId == null) {
+            return;
+        }
+        if (teamId == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "指定处理人时必须先选择处理团队");
+        }
+        if (!isTeamMember(teamId, assigneeId)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "处理人必须属于所选团队");
         }
     }
 
@@ -696,6 +761,10 @@ public class TicketServiceImpl implements TicketService {
 
     private boolean isTeamMember(Long teamId, Long userId) {
         return teamId != null && userId != null && teamMemberMapper.countActive(teamId, userId) > 0;
+    }
+
+    private boolean isTeamLeader(Long teamId, Long userId) {
+        return teamId != null && userId != null && teamMemberMapper.countLeader(teamId, userId) > 0;
     }
 
     private boolean hasRole(CurrentUser currentUser, String role) {

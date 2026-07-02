@@ -1,6 +1,7 @@
 package com.opsdesk.team.service;
 
 import com.opsdesk.common.response.PageResult;
+import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.team.dto.TeamCreateRequest;
 import com.opsdesk.team.dto.TeamLeaderUpdateRequest;
 import com.opsdesk.team.dto.TeamMemberSearchRequest;
@@ -27,7 +28,7 @@ public interface TeamService {
 
     void delete(String id, Long operatorId, String requestIp, String userAgent);
 
-    PageResult<TeamMemberVO> searchMembers(String id, TeamMemberSearchRequest request);
+    PageResult<TeamMemberVO> searchMembers(String id, TeamMemberSearchRequest request, CurrentUser currentUser);
 
     TeamVO updateMembers(String id, TeamMemberUpdateRequest request, Long operatorId, String requestIp, String userAgent);
 

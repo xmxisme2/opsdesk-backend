@@ -70,6 +70,14 @@ class TicketStateMachineTest {
     }
 
     @Test
+    void assignedUserShouldAcceptAndTransferWithoutAgentRole() {
+        assertThat(stateMachine.nextStatus(TicketStatus.PENDING_PROCESS, TicketAction.ACCEPT, assignedUser()))
+                .isEqualTo(TicketStatus.PROCESSING);
+        assertThat(stateMachine.nextStatus(TicketStatus.PENDING_PROCESS, TicketAction.TRANSFER, assignedUser()))
+                .isEqualTo(TicketStatus.PENDING_PROCESS);
+    }
+
+    @Test
     void reopenShouldOnlyAllowPendingConfirm() {
         assertThat(stateMachine.nextStatus(TicketStatus.PENDING_CONFIRM, TicketAction.REOPEN, creator()))
                 .isEqualTo(TicketStatus.PROCESSING);
@@ -111,6 +119,10 @@ class TicketStateMachineTest {
 
     private TicketStateContext assignee() {
         return TicketStateContext.of(20L, 10L, 20L, Set.of("AGENT"), true);
+    }
+
+    private TicketStateContext assignedUser() {
+        return TicketStateContext.of(20L, 10L, 20L, Set.of("USER"), false);
     }
 
     private TicketStateContext teamMember() {

@@ -35,7 +35,7 @@ public class TicketConverter {
                          SysUser assignee,
                          Team team,
                          boolean watching) {
-        return toVO(ticket, category, creator, assignee, team, watching, List.of());
+        return toVO(ticket, category, creator, assignee, team, watching, List.of(), List.of());
     }
 
     public TicketVO toVO(Ticket ticket,
@@ -45,6 +45,17 @@ public class TicketConverter {
                          Team team,
                          boolean watching,
                          List<AttachmentVO> attachments) {
+        return toVO(ticket, category, creator, assignee, team, watching, attachments, List.of());
+    }
+
+    public TicketVO toVO(Ticket ticket,
+                         TicketCategory category,
+                         SysUser creator,
+                         SysUser assignee,
+                         Team team,
+                         boolean watching,
+                         List<AttachmentVO> attachments,
+                         List<String> availableActions) {
         return new TicketVO(
                 String.valueOf(ticket.getId()),
                 ticket.getTicketNo(),
@@ -67,6 +78,7 @@ public class TicketConverter {
                 splitTags(ticket.getTags()),
                 watching,
                 attachments == null ? List.of() : attachments,
+                availableActions == null ? List.of() : availableActions,
                 format(ticket.getCreateTime()),
                 format(ticket.getUpdateTime())
         );

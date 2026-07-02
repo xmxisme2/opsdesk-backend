@@ -65,4 +65,13 @@
           AND user_id = #{userId}
           AND deleted = 0
     </select>
+
+    <select id="countLeader" resultType="int">
+        SELECT COUNT(1)
+        FROM team_member
+        WHERE team_id = #{teamId}
+          AND user_id = #{userId}
+          AND leader_flag = 1
+          AND deleted = 0
+    </select>
 </mapper>

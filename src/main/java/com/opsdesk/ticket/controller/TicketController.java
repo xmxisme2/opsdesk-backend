@@ -113,7 +113,7 @@ public class TicketController {
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('AGENT','MANAGER','ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
@@ -126,7 +126,7 @@ public class TicketController {
     }
 
     @PostMapping("/{id}/accept")
-    @PreAuthorize("hasAnyRole('AGENT','MANAGER','ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
@@ -138,7 +138,7 @@ public class TicketController {
     }
 
     @PostMapping("/{id}/transfer")
-    @PreAuthorize("hasAnyRole('AGENT','MANAGER','ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
@@ -151,7 +151,7 @@ public class TicketController {
     }
 
     @PostMapping("/{id}/complete")
-    @PreAuthorize("hasAnyRole('AGENT','MANAGER','ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,

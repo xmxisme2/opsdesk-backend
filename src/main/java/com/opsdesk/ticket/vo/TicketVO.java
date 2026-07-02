@@ -31,6 +31,7 @@ public record TicketVO(
         List<String> tags,
         Boolean watching,
         List<AttachmentVO> attachments,
+        List<String> availableActions,
         String createdAt,
         String updatedAt
 ) {

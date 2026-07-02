@@ -30,6 +30,9 @@ public interface TeamMemberMapper {
     int countActive(@Param("teamId") Long teamId,
                     @Param("userId") Long userId);
 
+    int countLeader(@Param("teamId") Long teamId,
+                    @Param("userId") Long userId);
+
     @Insert("""
             INSERT INTO team_member (
               id, team_id, user_id, member_role, leader_flag, create_by, update_by, deleted
