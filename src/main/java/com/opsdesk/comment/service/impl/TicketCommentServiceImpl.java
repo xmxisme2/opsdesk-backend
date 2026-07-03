@@ -20,6 +20,7 @@ import com.opsdesk.common.pagination.PageHelperPageResult;
 import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.common.util.IdParser;
+import com.opsdesk.notification.service.NotificationService;
 import com.opsdesk.team.mapper.TeamMemberMapper;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.entity.TicketOperationLog;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -79,6 +81,9 @@ public class TicketCommentServiceImpl implements TicketCommentService {
     /** 工单评论删除日志类型：写入 ticket_operation_log，用于追踪评论删除动作。 */
     private static final String OPERATION_COMMENT_DELETE = "COMMENT_DELETE";
 
+    /** 工单评论通知类型：写入 notification.type，外部请求不允许覆盖。 */
+    private static final String NOTIFICATION_TICKET_COMMENTED = "TICKET_COMMENTED";
+
     private final TicketCommentMapper commentMapper;
     private final TicketMapper ticketMapper;
     private final TicketOperationLogMapper ticketOperationLogMapper;
@@ -89,6 +94,7 @@ public class TicketCommentServiceImpl implements TicketCommentService {
     private final AuditLogService auditLogService;
     private final TicketCommentConverter commentConverter;
     private final AttachmentConverter attachmentConverter;
+    private final NotificationService notificationService;
 
     @Autowired
     public TicketCommentServiceImpl(TicketCommentMapper commentMapper,
@@ -98,9 +104,22 @@ public class TicketCommentServiceImpl implements TicketCommentService {
                                     SysUserMapper sysUserMapper,
                                     AttachmentMapper attachmentMapper,
                                     SnowflakeIdGenerator idGenerator,
+                                    AuditLogService auditLogService,
+                                    NotificationService notificationService) {
+        this(commentMapper, ticketMapper, ticketOperationLogMapper, teamMemberMapper, sysUserMapper, attachmentMapper, idGenerator,
+                auditLogService, new TicketCommentConverter(), new AttachmentConverter(), notificationService);
+    }
+
+    public TicketCommentServiceImpl(TicketCommentMapper commentMapper,
+                                    TicketMapper ticketMapper,
+                                    TicketOperationLogMapper ticketOperationLogMapper,
+                                    TeamMemberMapper teamMemberMapper,
+                                    SysUserMapper sysUserMapper,
+                                    AttachmentMapper attachmentMapper,
+                                    SnowflakeIdGenerator idGenerator,
                                     AuditLogService auditLogService) {
         this(commentMapper, ticketMapper, ticketOperationLogMapper, teamMemberMapper, sysUserMapper, attachmentMapper, idGenerator,
-                auditLogService, new TicketCommentConverter(), new AttachmentConverter());
+                auditLogService, new TicketCommentConverter(), new AttachmentConverter(), null);
     }
 
     public TicketCommentServiceImpl(TicketCommentMapper commentMapper,
@@ -113,6 +132,21 @@ public class TicketCommentServiceImpl implements TicketCommentService {
                                     AuditLogService auditLogService,
                                     TicketCommentConverter commentConverter,
                                     AttachmentConverter attachmentConverter) {
+        this(commentMapper, ticketMapper, ticketOperationLogMapper, teamMemberMapper, sysUserMapper, attachmentMapper, idGenerator,
+                auditLogService, commentConverter, attachmentConverter, null);
+    }
+
+    public TicketCommentServiceImpl(TicketCommentMapper commentMapper,
+                                    TicketMapper ticketMapper,
+                                    TicketOperationLogMapper ticketOperationLogMapper,
+                                    TeamMemberMapper teamMemberMapper,
+                                    SysUserMapper sysUserMapper,
+                                    AttachmentMapper attachmentMapper,
+                                    SnowflakeIdGenerator idGenerator,
+                                    AuditLogService auditLogService,
+                                    TicketCommentConverter commentConverter,
+                                    AttachmentConverter attachmentConverter,
+                                    NotificationService notificationService) {
         this.commentMapper = commentMapper;
         this.ticketMapper = ticketMapper;
         this.ticketOperationLogMapper = ticketOperationLogMapper;
@@ -123,6 +157,7 @@ public class TicketCommentServiceImpl implements TicketCommentService {
         this.auditLogService = auditLogService;
         this.commentConverter = commentConverter;
         this.attachmentConverter = attachmentConverter;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -158,6 +193,7 @@ public class TicketCommentServiceImpl implements TicketCommentService {
         }
         bindTempAttachments(request.getTempToken(), operatorId, comment.getId());
         recordTicketLog(ticket, OPERATION_COMMENT_CREATE, operatorId, "新增工单评论", requestIp, userAgent);
+        notifyCommentCreated(ticket, operatorId);
         return assembleCommentVO(comment);
     }
 
@@ -212,6 +248,42 @@ public class TicketCommentServiceImpl implements TicketCommentService {
         log.setCreateBy(operatorId);
         log.setUpdateBy(operatorId);
         ticketOperationLogMapper.insert(log);
+    }
+
+    /**
+     * 评论通知：通知创建人、当前处理人；未指派个人时通知团队负责人，并跳过评论作者本人。
+     */
+    private void notifyCommentCreated(Ticket ticket, Long operatorId) {
+        if (notificationService == null || ticket == null) {
+            return;
+        }
+        LinkedHashSet<Long> receiverIds = new LinkedHashSet<>();
+        receiverIds.add(ticket.getCreatorId());
+        if (ticket.getAssigneeId() != null) {
+            receiverIds.add(ticket.getAssigneeId());
+        } else if (ticket.getTeamId() != null) {
+            List<Long> leaderIds = teamMemberMapper.findLeaderIdsByTeamId(ticket.getTeamId());
+            if (leaderIds != null) {
+                receiverIds.addAll(leaderIds);
+            }
+        }
+        receiverIds.remove(null);
+        receiverIds.remove(operatorId);
+        receiverIds.forEach(receiverId -> notificationService.createTicketNotification(
+                receiverId,
+                NOTIFICATION_TICKET_COMMENTED,
+                "工单有新评论",
+                "工单 " + displayTicketNo(ticket) + " 有新评论",
+                ticket.getId(),
+                operatorId
+        ));
+    }
+
+    private String displayTicketNo(Ticket ticket) {
+        if (ticket == null) {
+            return "-";
+        }
+        return StringUtils.hasText(ticket.getTicketNo()) ? ticket.getTicketNo() : String.valueOf(ticket.getId());
     }
 
     private void bindTempAttachments(String tempToken, Long operatorId, Long commentId) {

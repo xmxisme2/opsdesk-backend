@@ -35,9 +35,7 @@ public class TicketStateMachine {
             case TRANSFER -> requireAnyStatus(currentStatus, action, TicketStatus.PENDING_PROCESS, TicketStatus.PROCESSING)
                     ? TicketStatus.PENDING_PROCESS
                     : throwStateConflict(currentStatus, action);
-            case REJECT -> requireAnyStatus(currentStatus, action, TicketStatus.PENDING_ASSIGN, TicketStatus.PROCESSING)
-                    ? TicketStatus.DRAFT
-                    : throwStateConflict(currentStatus, action);
+            case REJECT -> resolveRejectTargetStatus(currentStatus, action);
             case COMPLETE -> requireStatus(currentStatus, TicketStatus.PROCESSING, TicketStatus.PENDING_CONFIRM, action);
             case CONFIRM -> requireStatus(currentStatus, TicketStatus.PENDING_CONFIRM, TicketStatus.COMPLETED, action);
             case REOPEN -> requireStatus(currentStatus, TicketStatus.PENDING_CONFIRM, TicketStatus.PROCESSING, action);
@@ -50,8 +48,9 @@ public class TicketStateMachine {
             case SUBMIT, CONFIRM, REOPEN -> context.isCreator();
             case CANCEL -> context.isCreator() || (currentStatus == TicketStatus.PENDING_ASSIGN && context.isAdmin());
             case ASSIGN -> context.isManagerOrAdmin();
-            case ACCEPT, TRANSFER -> context.isCurrentAssignee()
+            case ACCEPT -> context.isCurrentAssignee()
                     || (context.isAgentOrAbove() && (context.isTeamMember() || context.isManagerOrAdmin()));
+            case TRANSFER -> context.isAgentOrAbove() && (context.isTeamMember() || context.isManagerOrAdmin());
             case REJECT -> currentStatus == TicketStatus.PENDING_ASSIGN
                     ? context.isManagerOrAdmin()
                     : context.isCurrentAssignee();
@@ -81,6 +80,16 @@ public class TicketStateMachine {
             }
         }
         return false;
+    }
+
+    private TicketStatus resolveRejectTargetStatus(TicketStatus currentStatus, TicketAction action) {
+        if (currentStatus == TicketStatus.PENDING_ASSIGN) {
+            return TicketStatus.DRAFT;
+        }
+        if (currentStatus == TicketStatus.PENDING_PROCESS || currentStatus == TicketStatus.PROCESSING) {
+            return TicketStatus.PENDING_ASSIGN;
+        }
+        return throwStateConflict(currentStatus, action);
     }
 
     private <T> T throwStateConflict(TicketStatus currentStatus, TicketAction action) {

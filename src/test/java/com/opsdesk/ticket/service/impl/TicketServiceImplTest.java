@@ -11,6 +11,8 @@ import com.opsdesk.team.mapper.TeamMemberMapper;
 import com.opsdesk.ticket.dto.TicketAssignRequest;
 import com.opsdesk.ticket.dto.TicketCreateRequest;
 import com.opsdesk.ticket.converter.TicketConverter;
+import com.opsdesk.ticket.dto.TicketReasonRequest;
+import com.opsdesk.ticket.dto.TicketTransferRequest;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.entity.TicketCategory;
 import com.opsdesk.ticket.entity.TicketOperationLog;
@@ -172,7 +174,7 @@ class TicketServiceImplTest {
 
         TicketVO ticketVO = ticketService.detail("100", user(20L, "USER"));
 
-        assertThat(ticketVO.availableActions()).containsExactly("accept", "transfer");
+        assertThat(ticketVO.availableActions()).containsExactly("accept", "reject");
     }
 
     @Test
@@ -187,7 +189,35 @@ class TicketServiceImplTest {
         assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("PROCESSING");
         assertThat(ticketCaptor.getValue().getAssigneeId()).isEqualTo(20L);
         assertThat(ticketVO.status()).isEqualTo("PROCESSING");
-        assertThat(ticketVO.availableActions()).containsExactly("transfer", "reject", "complete");
+        assertThat(ticketVO.availableActions()).containsExactly("reject", "complete");
+    }
+
+    @Test
+    void transferShouldRejectAssignedUserWithoutAgentRole() {
+        when(ticketMapper.findById(100L)).thenReturn(pendingProcessTicket(10L, 20L));
+        when(teamMemberMapper.countActive(1L, 30L)).thenReturn(1);
+        TicketTransferRequest request = transferRequest("1", "30");
+
+        assertThatThrownBy(() -> ticketService.transfer("100", request, user(20L, "USER"), "127.0.0.1", "JUnit"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FORBIDDEN);
+
+        verify(ticketMapper, never()).update(any());
+    }
+
+    @Test
+    void rejectShouldReturnAssignedUserTicketToPendingAssign() {
+        when(ticketMapper.findById(100L)).thenReturn(processingTicket(10L, 20L));
+        when(ticketMapper.update(any(Ticket.class))).thenReturn(1);
+
+        TicketVO ticketVO = ticketService.reject("100", reasonRequest("退回团队负责人"), user(20L, "USER"), "127.0.0.1", "JUnit");
+
+        ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+        verify(ticketMapper).update(ticketCaptor.capture());
+        assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("PENDING_ASSIGN");
+        assertThat(ticketCaptor.getValue().getAssigneeId()).isNull();
+        assertThat(ticketVO.status()).isEqualTo("PENDING_ASSIGN");
     }
 
     @Test
@@ -272,11 +302,31 @@ class TicketServiceImplTest {
         return ticket;
     }
 
+    private Ticket processingTicket(Long creatorId, Long assigneeId) {
+        Ticket ticket = pendingProcessTicket(creatorId, assigneeId);
+        ticket.setStatus("PROCESSING");
+        return ticket;
+    }
+
     private TicketAssignRequest assignRequest(String teamId, String assigneeId) {
         TicketAssignRequest request = new TicketAssignRequest();
         request.setTeamId(teamId);
         request.setAssigneeId(assigneeId);
         request.setReason("assign by team");
+        return request;
+    }
+
+    private TicketTransferRequest transferRequest(String teamId, String assigneeId) {
+        TicketTransferRequest request = new TicketTransferRequest();
+        request.setTargetTeamId(teamId);
+        request.setTargetAssigneeId(assigneeId);
+        request.setReason("transfer by team");
+        return request;
+    }
+
+    private TicketReasonRequest reasonRequest(String reason) {
+        TicketReasonRequest request = new TicketReasonRequest();
+        request.setReason(reason);
         return request;
     }
 

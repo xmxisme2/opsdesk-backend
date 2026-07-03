@@ -12,6 +12,7 @@ import com.opsdesk.notification.vo.NotificationUnreadCountVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -90,6 +91,21 @@ class NotificationServiceImplTest {
         int updatedCount = notificationService.readAll(request, user(10L)).updatedCount();
 
         assertThat(updatedCount).isEqualTo(3);
+        verify(stringRedisTemplate).delete("notification:unread:10");
+    }
+
+    @Test
+    void createTicketNotificationShouldInsertAndRefreshUnreadCache() {
+        notificationService.createTicketNotification(10L, "TICKET_ASSIGNED", "工单已分派",
+                "工单 TK202606220001 已分派给你", 200L, 1L);
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationMapper).insert(notificationCaptor.capture());
+        assertThat(notificationCaptor.getValue().getReceiverId()).isEqualTo(10L);
+        assertThat(notificationCaptor.getValue().getType()).isEqualTo("TICKET_ASSIGNED");
+        assertThat(notificationCaptor.getValue().getBizType()).isEqualTo("TICKET");
+        assertThat(notificationCaptor.getValue().getBizId()).isEqualTo(200L);
+        assertThat(notificationCaptor.getValue().getReadStatus()).isZero();
         verify(stringRedisTemplate).delete("notification:unread:10");
     }
 

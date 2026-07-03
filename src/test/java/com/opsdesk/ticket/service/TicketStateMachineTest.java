@@ -52,11 +52,13 @@ class TicketStateMachineTest {
     }
 
     @Test
-    void rejectShouldReturnToDraftOnlyFromPendingAssignOrProcessing() {
+    void rejectShouldReturnToDraftOrPendingAssign() {
         assertThat(stateMachine.nextStatus(TicketStatus.PENDING_ASSIGN, TicketAction.REJECT, manager()))
                 .isEqualTo(TicketStatus.DRAFT);
+        assertThat(stateMachine.nextStatus(TicketStatus.PENDING_PROCESS, TicketAction.REJECT, assignedUser()))
+                .isEqualTo(TicketStatus.PENDING_ASSIGN);
         assertThat(stateMachine.nextStatus(TicketStatus.PROCESSING, TicketAction.REJECT, assignee()))
-                .isEqualTo(TicketStatus.DRAFT);
+                .isEqualTo(TicketStatus.PENDING_ASSIGN);
 
         assertStateConflict(TicketStatus.PENDING_CONFIRM, TicketAction.REJECT, assignee());
     }
@@ -70,11 +72,15 @@ class TicketStateMachineTest {
     }
 
     @Test
-    void assignedUserShouldAcceptAndTransferWithoutAgentRole() {
+    void assignedUserShouldAcceptAndRejectWithoutAgentRole() {
         assertThat(stateMachine.nextStatus(TicketStatus.PENDING_PROCESS, TicketAction.ACCEPT, assignedUser()))
                 .isEqualTo(TicketStatus.PROCESSING);
-        assertThat(stateMachine.nextStatus(TicketStatus.PENDING_PROCESS, TicketAction.TRANSFER, assignedUser()))
-                .isEqualTo(TicketStatus.PENDING_PROCESS);
+        assertThat(stateMachine.nextStatus(TicketStatus.PENDING_PROCESS, TicketAction.REJECT, assignedUser()))
+                .isEqualTo(TicketStatus.PENDING_ASSIGN);
+        assertThatThrownBy(() -> stateMachine.nextStatus(TicketStatus.PENDING_PROCESS, TicketAction.TRANSFER, assignedUser()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FORBIDDEN);
     }
 
     @Test

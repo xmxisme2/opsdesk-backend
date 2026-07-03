@@ -22,4 +22,14 @@ public interface NotificationService {
     NotificationVO markRead(String id, CurrentUser currentUser);
 
     NotificationReadAllVO readAll(NotificationReadAllRequest request, CurrentUser currentUser);
+
+    /**
+     * 创建工单站内通知，由业务服务在分派、评论和状态流转后调用。
+     */
+    void createTicketNotification(Long receiverId,
+                                  String type,
+                                  String title,
+                                  String content,
+                                  Long ticketId,
+                                  Long operatorId);
 }

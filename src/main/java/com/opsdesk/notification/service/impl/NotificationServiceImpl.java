@@ -2,6 +2,7 @@ package com.opsdesk.notification.service.impl;
 
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
+import com.opsdesk.common.id.SnowflakeIdGenerator;
 import com.opsdesk.common.pagination.PageHelperPageResult;
 import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.security.CurrentUser;
@@ -56,19 +57,28 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationMapper notificationMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final NotificationConverter notificationConverter;
+    private final SnowflakeIdGenerator idGenerator;
 
     @Autowired
     public NotificationServiceImpl(NotificationMapper notificationMapper,
                                    StringRedisTemplate stringRedisTemplate) {
-        this(notificationMapper, stringRedisTemplate, new NotificationConverter());
+        this(notificationMapper, stringRedisTemplate, new NotificationConverter(), new SnowflakeIdGenerator());
     }
 
     public NotificationServiceImpl(NotificationMapper notificationMapper,
                                    StringRedisTemplate stringRedisTemplate,
                                    NotificationConverter notificationConverter) {
+        this(notificationMapper, stringRedisTemplate, notificationConverter, new SnowflakeIdGenerator());
+    }
+
+    public NotificationServiceImpl(NotificationMapper notificationMapper,
+                                   StringRedisTemplate stringRedisTemplate,
+                                   NotificationConverter notificationConverter,
+                                   SnowflakeIdGenerator idGenerator) {
         this.notificationMapper = notificationMapper;
         this.stringRedisTemplate = stringRedisTemplate;
         this.notificationConverter = notificationConverter;
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -125,6 +135,40 @@ public class NotificationServiceImpl implements NotificationService {
         int updatedCount = notificationMapper.markAllRead(receiverId, type, receiverId);
         stringRedisTemplate.delete(unreadKey(receiverId));
         return new NotificationReadAllVO(updatedCount);
+    }
+
+    @Override
+    public void createTicketNotification(Long receiverId,
+                                         String type,
+                                         String title,
+                                         String content,
+                                         Long ticketId,
+                                         Long operatorId) {
+        if (receiverId == null || ticketId == null) {
+            return;
+        }
+        String normalizedType = normalizeOptionalType(type);
+        if (!StringUtils.hasText(title) || !StringUtils.hasText(content)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "通知标题和内容不能为空");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Notification notification = new Notification();
+        notification.setId(idGenerator.nextId());
+        notification.setReceiverId(receiverId);
+        notification.setType(normalizedType);
+        notification.setTitle(title.trim());
+        notification.setContent(content.trim());
+        notification.setBizType("TICKET");
+        notification.setBizId(ticketId);
+        notification.setReadStatus(0);
+        notification.setCreateTime(now);
+        notification.setUpdateTime(now);
+        notification.setCreateBy(operatorId);
+        notification.setUpdateBy(operatorId);
+        notification.setDeleted(0);
+        notificationMapper.insert(notification);
+        stringRedisTemplate.delete(unreadKey(receiverId));
     }
 
     private Notification requireNotification(Long notificationId) {

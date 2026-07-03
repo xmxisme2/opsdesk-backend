@@ -13,6 +13,7 @@ import com.opsdesk.common.pagination.PageQuery;
 import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.common.util.IdParser;
+import com.opsdesk.notification.service.NotificationService;
 import com.opsdesk.team.entity.Team;
 import com.opsdesk.team.mapper.TeamMapper;
 import com.opsdesk.team.mapper.TeamMemberMapper;
@@ -90,6 +91,15 @@ public class TicketServiceImpl implements TicketService {
     /** 取消关注日志类型：记录用户取消关注工单，便于后续时间线聚合。 */
     private static final String OPERATION_TICKET_UNWATCH = "TICKET_UNWATCH";
 
+    /** 工单分派通知类型：写入 notification.type，外部请求不允许覆盖。 */
+    private static final String NOTIFICATION_TICKET_ASSIGNED = "TICKET_ASSIGNED";
+
+    /** 工单状态变更通知类型：写入 notification.type，用于接单、退回、完成等流转提醒。 */
+    private static final String NOTIFICATION_TICKET_STATUS_CHANGED = "TICKET_STATUS_CHANGED";
+
+    /** 工单关闭通知类型：写入 notification.type，用于最终关闭提醒。 */
+    private static final String NOTIFICATION_TICKET_CLOSED = "TICKET_CLOSED";
+
     /** 标签最大数量：避免单个工单标签过多拖慢列表展示和筛选，外部传入超过会报参数错误。 */
     private static final int MAX_TAG_COUNT = 20;
 
@@ -111,6 +121,7 @@ public class TicketServiceImpl implements TicketService {
     private final TicketConverter ticketConverter;
     private final AttachmentMapper attachmentMapper;
     private final AttachmentConverter attachmentConverter;
+    private final NotificationService notificationService;
 
     public TicketServiceImpl(TicketMapper ticketMapper,
                              TicketCategoryMapper ticketCategoryMapper,
@@ -123,7 +134,25 @@ public class TicketServiceImpl implements TicketService {
                              TicketStateMachine ticketStateMachine) {
         this(ticketMapper, ticketCategoryMapper, ticketOperationLogMapper, ticketWatchMapper, teamMemberMapper,
                 sysUserMapper, idGenerator, ticketNoGenerator, ticketStateMachine, null, new TicketConverter(),
-                null, new AttachmentConverter());
+                null, new AttachmentConverter(), null);
+    }
+
+    public TicketServiceImpl(TicketMapper ticketMapper,
+                             TicketCategoryMapper ticketCategoryMapper,
+                             TicketOperationLogMapper ticketOperationLogMapper,
+                             TicketWatchMapper ticketWatchMapper,
+                             TeamMemberMapper teamMemberMapper,
+                             SysUserMapper sysUserMapper,
+                             SnowflakeIdGenerator idGenerator,
+                             TicketNoGenerator ticketNoGenerator,
+                             TicketStateMachine ticketStateMachine,
+                             TeamMapper teamMapper,
+                             TicketConverter ticketConverter,
+                             AttachmentMapper attachmentMapper,
+                             AttachmentConverter attachmentConverter) {
+        this(ticketMapper, ticketCategoryMapper, ticketOperationLogMapper, ticketWatchMapper, teamMemberMapper,
+                sysUserMapper, idGenerator, ticketNoGenerator, ticketStateMachine, teamMapper, ticketConverter,
+                attachmentMapper, attachmentConverter, null);
     }
 
     @Autowired
@@ -139,7 +168,8 @@ public class TicketServiceImpl implements TicketService {
                              TeamMapper teamMapper,
                              TicketConverter ticketConverter,
                              AttachmentMapper attachmentMapper,
-                             AttachmentConverter attachmentConverter) {
+                             AttachmentConverter attachmentConverter,
+                             NotificationService notificationService) {
         this.ticketMapper = ticketMapper;
         this.ticketCategoryMapper = ticketCategoryMapper;
         this.ticketOperationLogMapper = ticketOperationLogMapper;
@@ -153,6 +183,7 @@ public class TicketServiceImpl implements TicketService {
         this.ticketConverter = ticketConverter;
         this.attachmentMapper = attachmentMapper;
         this.attachmentConverter = attachmentConverter;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -268,6 +299,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.SUBMIT), fromStatus, ticket.getStatus(), operatorId,
                 "提交工单", requestIp, userAgent);
+        notifyTicketStatusChanged(ticket, operatorId, "工单已提交");
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -298,6 +330,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.ASSIGN), fromStatus, ticket.getStatus(), operatorId,
                 contentOrDefault(request == null ? null : request.getReason(), "分派工单"), requestIp, userAgent);
+        notifyTicketAssignment(ticket, operatorId, "工单已分派", "工单 " + displayTicketNo(ticket) + " 已分派给你或你的团队");
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -323,6 +356,9 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.REJECT), fromStatus, ticket.getStatus(), operatorId,
                 request.getReason().trim(), requestIp, userAgent);
+        notifyTicketStatusChanged(ticket, operatorId, targetStatus == TicketStatus.PENDING_ASSIGN
+                ? "工单已退回团队负责人"
+                : "工单已驳回");
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -340,6 +376,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.ACCEPT), fromStatus, ticket.getStatus(), operatorId,
                 "接单处理", requestIp, userAgent);
+        notifyTicketStatusChanged(ticket, operatorId, "工单已接单");
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -371,6 +408,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.TRANSFER), fromStatus, ticket.getStatus(), operatorId,
                 request.getReason().trim(), requestIp, userAgent);
+        notifyTicketAssignment(ticket, operatorId, "工单已转派", "工单 " + displayTicketNo(ticket) + " 已转派给你或你的团队");
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -391,6 +429,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.COMPLETE), fromStatus, ticket.getStatus(), operatorId,
                 contentOrDefault(request == null ? null : request.getCompleteRemark(), "提交处理完成"), requestIp, userAgent);
+        notifyTicketStatusChanged(ticket, operatorId, "工单已提交完成");
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -412,6 +451,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.CONFIRM), fromStatus, ticket.getStatus(), operatorId,
                 contentOrDefault(request == null ? null : request.getComment(), "确认完成"), requestIp, userAgent);
+        notifyTicketStatusChanged(ticket, operatorId, "工单已确认完成");
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -434,6 +474,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.REOPEN), fromStatus, ticket.getStatus(), operatorId,
                 request.getReason().trim(), requestIp, userAgent);
+        notifyTicketStatusChanged(ticket, operatorId, "工单已重开");
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -456,6 +497,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.CLOSE), fromStatus, ticket.getStatus(), operatorId,
                 contentOrDefault(request == null ? null : request.getReason(), "关闭工单"), requestIp, userAgent);
+        notifyTicketClosed(ticket, operatorId);
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -477,6 +519,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.CANCEL), fromStatus, ticket.getStatus(), operatorId,
                 request.getReason().trim(), requestIp, userAgent);
+        notifyTicketStatusChanged(ticket, operatorId, "工单已取消");
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -601,7 +644,7 @@ public class TicketServiceImpl implements TicketService {
         return switch (currentStatus) {
             case DRAFT -> List.of(TicketAction.SUBMIT, TicketAction.CANCEL);
             case PENDING_ASSIGN -> List.of(TicketAction.ASSIGN, TicketAction.REJECT, TicketAction.CANCEL);
-            case PENDING_PROCESS -> List.of(TicketAction.ACCEPT, TicketAction.TRANSFER);
+            case PENDING_PROCESS -> List.of(TicketAction.ACCEPT, TicketAction.REJECT, TicketAction.TRANSFER);
             case PROCESSING -> List.of(TicketAction.TRANSFER, TicketAction.REJECT, TicketAction.COMPLETE);
             case PENDING_CONFIRM -> List.of(TicketAction.CONFIRM, TicketAction.REOPEN);
             case COMPLETED -> List.of(TicketAction.CLOSE);
@@ -653,6 +696,66 @@ public class TicketServiceImpl implements TicketService {
         log.setCreateBy(operatorId);
         log.setUpdateBy(operatorId);
         ticketOperationLogMapper.insert(log);
+    }
+
+    /**
+     * 工单分派通知：有具体处理人时只通知处理人；仅分派到团队时通知团队负责人。
+     */
+    private void notifyTicketAssignment(Ticket ticket, Long operatorId, String title, String content) {
+        notifyTicketReceivers(ticket, operatorId, NOTIFICATION_TICKET_ASSIGNED, title, content, false);
+    }
+
+    /**
+     * 工单状态通知：通知创建人、当前处理人；没有处理人时补充通知团队负责人。
+     */
+    private void notifyTicketStatusChanged(Ticket ticket, Long operatorId, String title) {
+        notifyTicketReceivers(ticket, operatorId, NOTIFICATION_TICKET_STATUS_CHANGED, title,
+                "工单 " + displayTicketNo(ticket) + " 当前状态为 " + ticket.getStatus(), true);
+    }
+
+    private void notifyTicketClosed(Ticket ticket, Long operatorId) {
+        notifyTicketReceivers(ticket, operatorId, NOTIFICATION_TICKET_CLOSED, "工单已关闭",
+                "工单 " + displayTicketNo(ticket) + " 已关闭", true);
+    }
+
+    private void notifyTicketReceivers(Ticket ticket,
+                                       Long operatorId,
+                                       String type,
+                                       String title,
+                                       String content,
+                                       boolean includeCreator) {
+        if (notificationService == null || ticket == null) {
+            return;
+        }
+        LinkedHashSet<Long> receiverIds = new LinkedHashSet<>();
+        if (includeCreator) {
+            receiverIds.add(ticket.getCreatorId());
+        }
+        if (ticket.getAssigneeId() != null) {
+            receiverIds.add(ticket.getAssigneeId());
+        } else if (ticket.getTeamId() != null) {
+            List<Long> leaderIds = teamMemberMapper.findLeaderIdsByTeamId(ticket.getTeamId());
+            if (leaderIds != null) {
+                receiverIds.addAll(leaderIds);
+            }
+        }
+        receiverIds.remove(null);
+        receiverIds.remove(operatorId);
+        receiverIds.forEach(receiverId -> notificationService.createTicketNotification(
+                receiverId,
+                type,
+                title,
+                content,
+                ticket.getId(),
+                operatorId
+        ));
+    }
+
+    private String displayTicketNo(Ticket ticket) {
+        if (ticket == null) {
+            return "-";
+        }
+        return StringUtils.hasText(ticket.getTicketNo()) ? ticket.getTicketNo() : String.valueOf(ticket.getId());
     }
 
     private Ticket loadTicket(Long ticketId) {
