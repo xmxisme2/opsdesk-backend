@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.audit.mapper.AuditLogMapper">
+
+    <!-- 审计日志写入：审计内容由业务服务组织，Mapper 只负责持久化字段。 -->
+    <insert id="insert">
+        INSERT INTO audit_log (
+          id, operator_id, operation_type, biz_type, biz_id, content, request_ip, user_agent,
+          create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{operatorId}, #{operationType}, #{bizType}, #{bizId}, #{content}, #{requestIp}, #{userAgent},
+          #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+</mapper>

@@ -11,4 +11,38 @@
           AND permission_id = #{permissionId}
           AND deleted = 0
     </select>
+    <update id="restoreDeleted">
+        UPDATE sys_role_permission
+        SET deleted = 0,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE role_id = #{roleId}
+          AND permission_id = #{permissionId}
+          AND deleted = 1
+        LIMIT 1
+    </update>
+
+    <insert id="insert">
+        INSERT INTO sys_role_permission (
+          id, role_id, permission_id, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{roleId}, #{permissionId}, #{operatorId}, #{operatorId}, 0
+        )
+    </insert>
+
+    <update id="deactivateMissing">
+        UPDATE sys_role_permission
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE role_id = #{roleId}
+          AND deleted = 0
+        <if test="permissionIds != null and permissionIds.size > 0">
+          AND permission_id NOT IN
+          <foreach collection="permissionIds" item="permissionId" open="(" separator="," close=")">
+            #{permissionId}
+          </foreach>
+        </if>
+    </update>
 </mapper>

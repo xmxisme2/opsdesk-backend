@@ -9,6 +9,17 @@
         create_time, update_time, create_by, update_by, deleted
     </sql>
 
+    <insert id="insert">
+        INSERT INTO notification (
+          id, receiver_id, type, title, content, biz_type, biz_id, read_status,
+          read_time, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{receiverId}, #{type}, #{title}, #{content}, #{bizType}, #{bizId}, #{readStatus},
+          #{readTime}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
     <select id="findById" resultType="com.opsdesk.notification.entity.Notification">
         SELECT <include refid="NotificationColumns"/>
         FROM notification
@@ -44,4 +55,39 @@
           AND read_status = 0
           AND deleted = 0
     </select>
+
+    <select id="findLatestByReceiver" resultType="com.opsdesk.notification.entity.Notification">
+        SELECT <include refid="NotificationColumns"/>
+        FROM notification
+        WHERE receiver_id = #{receiverId}
+          AND deleted = 0
+        ORDER BY create_time DESC, id DESC
+        LIMIT #{limit}
+    </select>
+
+    <update id="markRead">
+        UPDATE notification
+        SET read_status = 1,
+            read_time = CURRENT_TIMESTAMP,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND receiver_id = #{receiverId}
+          AND read_status = 0
+          AND deleted = 0
+    </update>
+
+    <update id="markAllRead">
+        UPDATE notification
+        SET read_status = 1,
+            read_time = CURRENT_TIMESTAMP,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE receiver_id = #{receiverId}
+          AND read_status = 0
+          AND deleted = 0
+        <if test="type != null and type != ''">
+          AND type = #{type}
+        </if>
+    </update>
 </mapper>

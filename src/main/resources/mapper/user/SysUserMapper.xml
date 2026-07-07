@@ -33,6 +33,62 @@
         LIMIT 1
     </select>
 
+    <insert id="insert">
+        INSERT INTO sys_user (
+          id, phone, password_hash, username, nickname, email, gender, avatar_code, avatar_url,
+          department_id, status, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{phone}, #{passwordHash}, #{username}, #{nickname}, #{email}, #{gender}, #{avatarCode}, #{avatarUrl},
+          #{departmentId}, #{status}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
+    <update id="updateProfile">
+        UPDATE sys_user
+        SET phone = #{phone},
+            username = #{username},
+            nickname = #{nickname},
+            email = #{email},
+            gender = #{gender},
+            avatar_code = #{avatarCode},
+            avatar_url = #{avatarUrl},
+            department_id = #{departmentId},
+            status = #{status},
+            update_by = #{updateBy},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
+
+    <update id="updateStatus">
+        UPDATE sys_user
+        SET status = #{status},
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{userId}
+          AND deleted = 0
+    </update>
+
+    <update id="logicalDelete">
+        UPDATE sys_user
+        SET status = #{status},
+            deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{userId}
+          AND deleted = 0
+    </update>
+
+    <update id="updatePassword">
+        UPDATE sys_user
+        SET password_hash = #{passwordHash},
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{userId}
+          AND deleted = 0
+    </update>
+
     <select id="countByPhone" resultType="int">
         SELECT COUNT(1)
         FROM sys_user

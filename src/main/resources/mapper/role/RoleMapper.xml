@@ -53,9 +53,39 @@
           AND id IN
           <foreach collection="ids" item="id" open="(" separator="," close=")">
             #{id}
-          </foreach>
+        </foreach>
         ORDER BY id
     </select>
+
+    <insert id="insert">
+        INSERT INTO sys_role (
+          id, code, name, description, built_in, enabled, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{code}, #{name}, #{description}, #{builtIn}, #{enabled}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE sys_role
+        SET name = #{name},
+            description = #{description},
+            enabled = #{enabled},
+            update_by = #{updateBy},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
+
+    <update id="logicalDelete">
+        UPDATE sys_role
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND built_in = 0
+          AND deleted = 0
+    </update>
 
     <select id="search" resultType="com.opsdesk.role.entity.Role">
         SELECT <include refid="RoleColumns"/>

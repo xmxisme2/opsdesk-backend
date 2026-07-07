@@ -4,6 +4,17 @@
 <mapper namespace="com.opsdesk.ticket.mapper.TicketOperationLogMapper">
 
     <!-- 工单操作日志字段：用于详情页时间线分页展示。 -->
+    <insert id="insert">
+        INSERT INTO ticket_operation_log (
+          id, ticket_id, operation_type, from_status, to_status, operator_id,
+          content, request_ip, user_agent, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{ticketId}, #{operationType}, #{fromStatus}, #{toStatus}, #{operatorId},
+          #{content}, #{requestIp}, #{userAgent}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
     <select id="searchByTicketId" resultType="com.opsdesk.ticket.entity.TicketOperationLog">
         SELECT id, ticket_id, operation_type, from_status, to_status, operator_id,
                content, request_ip, user_agent, create_time, update_time, create_by, update_by, deleted

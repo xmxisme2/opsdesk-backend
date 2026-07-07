@@ -34,4 +34,38 @@
           AND role_id = #{roleId}
           AND deleted = 0
     </select>
+    <insert id="insert">
+        INSERT INTO sys_user_role (
+          id, user_id, role_id, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{userId}, #{roleId}, #{operatorId}, #{operatorId}, 0
+        )
+    </insert>
+
+    <update id="restoreDeleted">
+        UPDATE sys_user_role
+        SET deleted = 0,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE user_id = #{userId}
+          AND role_id = #{roleId}
+          AND deleted = 1
+        LIMIT 1
+    </update>
+
+    <update id="deactivateMissing">
+        UPDATE sys_user_role
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE user_id = #{userId}
+          AND deleted = 0
+        <if test="roleIds != null and roleIds.size > 0">
+          AND role_id NOT IN
+          <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+            #{roleId}
+          </foreach>
+        </if>
+    </update>
 </mapper>

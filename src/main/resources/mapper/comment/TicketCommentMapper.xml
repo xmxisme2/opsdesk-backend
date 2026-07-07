@@ -4,6 +4,15 @@
 <mapper namespace="com.opsdesk.comment.mapper.TicketCommentMapper">
 
     <!-- 评论基础字段：额外 author_name 仅用于 VO 展示，不参与写入。 -->
+    <insert id="insert">
+        INSERT INTO ticket_comment (
+          id, ticket_id, content, comment_type, author_id, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{ticketId}, #{content}, #{commentType}, #{authorId}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
     <select id="findById" resultType="com.opsdesk.comment.entity.TicketComment">
         SELECT c.id, c.ticket_id, c.content, c.comment_type, c.author_id,
                COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone) AS author_name,
@@ -28,4 +37,13 @@
         </if>
         ORDER BY c.create_time ASC, c.id ASC
     </select>
+
+    <update id="logicalDelete">
+        UPDATE ticket_comment
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
 </mapper>

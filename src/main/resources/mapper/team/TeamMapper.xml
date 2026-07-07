@@ -16,6 +16,36 @@
         LIMIT 1
     </select>
 
+    <insert id="insert">
+        INSERT INTO team (
+          id, name, description, processing_scope, enabled, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{name}, #{description}, #{processingScope}, #{enabled}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE team
+        SET name = #{name},
+            description = #{description},
+            processing_scope = #{processingScope},
+            enabled = #{enabled},
+            update_by = #{updateBy},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
+
+    <update id="logicalDelete">
+        UPDATE team
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
+
     <select id="countByName" resultType="int">
         SELECT COUNT(1)
         FROM team

@@ -1,7 +1,6 @@
 package com.opsdesk.ticket.mapper;
 
 import com.opsdesk.ticket.entity.TicketOperationLog;
-import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -15,16 +14,6 @@ import java.util.List;
 @Mapper
 public interface TicketOperationLogMapper {
 
-    @Insert("""
-            INSERT INTO ticket_operation_log (
-              id, ticket_id, operation_type, from_status, to_status, operator_id,
-              content, request_ip, user_agent, create_by, update_by, deleted
-            )
-            VALUES (
-              #{id}, #{ticketId}, #{operationType}, #{fromStatus}, #{toStatus}, #{operatorId},
-              #{content}, #{requestIp}, #{userAgent}, #{createBy}, #{updateBy}, 0
-            )
-            """)
     int insert(TicketOperationLog log);
 
     List<TicketOperationLog> searchByTicketId(@Param("ticketId") Long ticketId);

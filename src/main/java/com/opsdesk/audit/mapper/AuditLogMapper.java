@@ -1,7 +1,6 @@
 package com.opsdesk.audit.mapper;
 
 import com.opsdesk.audit.entity.AuditLog;
-import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
@@ -12,15 +11,5 @@ import org.apache.ibatis.annotations.Mapper;
 @Mapper
 public interface AuditLogMapper {
 
-    @Insert("""
-            INSERT INTO audit_log (
-              id, operator_id, operation_type, biz_type, biz_id, content, request_ip, user_agent,
-              create_by, update_by, deleted
-            )
-            VALUES (
-              #{id}, #{operatorId}, #{operationType}, #{bizType}, #{bizId}, #{content}, #{requestIp}, #{userAgent},
-              #{createBy}, #{updateBy}, 0
-            )
-            """)
     int insert(AuditLog auditLog);
 }

@@ -74,4 +74,84 @@
           AND leader_flag = 1
           AND deleted = 0
     </select>
+
+    <insert id="insert">
+        INSERT INTO team_member (
+          id, team_id, user_id, member_role, leader_flag, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{teamId}, #{userId}, #{memberRole}, #{leaderFlag}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
+    <update id="restoreDeleted">
+        UPDATE team_member
+        SET deleted = 0,
+            member_role = #{memberRole},
+            leader_flag = #{leaderFlag},
+            update_by = #{updateBy},
+            update_time = CURRENT_TIMESTAMP
+        WHERE team_id = #{teamId}
+          AND user_id = #{userId}
+          AND deleted = 1
+    </update>
+
+    <update id="updateMember">
+        UPDATE team_member
+        SET member_role = #{memberRole},
+            leader_flag = #{leaderFlag},
+            update_by = #{updateBy},
+            update_time = CURRENT_TIMESTAMP
+        WHERE team_id = #{teamId}
+          AND user_id = #{userId}
+          AND deleted = 0
+    </update>
+
+    <update id="deactivateMissing">
+        UPDATE team_member
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE team_id = #{teamId}
+          AND deleted = 0
+        <if test="userIds != null and userIds.size > 0">
+          AND user_id NOT IN
+          <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+          </foreach>
+        </if>
+    </update>
+
+    <update id="deactivateAllByTeamId">
+        UPDATE team_member
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE team_id = #{teamId}
+          AND deleted = 0
+    </update>
+
+    <update id="resetLeaders">
+        UPDATE team_member
+        SET leader_flag = 0,
+            member_role = 'MEMBER',
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE team_id = #{teamId}
+          AND deleted = 0
+    </update>
+
+    <update id="markLeaders">
+        UPDATE team_member
+        SET leader_flag = 1,
+            member_role = 'LEADER',
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE team_id = #{teamId}
+          AND deleted = 0
+          AND user_id IN
+          <foreach collection="leaderIds" item="leaderId" open="(" separator="," close=")">
+            #{leaderId}
+          </foreach>
+    </update>
 </mapper>

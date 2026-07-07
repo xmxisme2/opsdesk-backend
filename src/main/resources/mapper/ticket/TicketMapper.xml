@@ -32,6 +32,63 @@
           AND deleted = 0
     </select>
 
+    <select id="findOverdueCandidates" resultType="com.opsdesk.ticket.entity.Ticket">
+        SELECT t.id, t.ticket_no, t.title, t.description, t.category_id, t.priority, t.status,
+               t.creator_id, t.assignee_id, t.team_id, t.due_time, t.completed_time, t.closed_time,
+               t.overdue, t.tags, t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
+        FROM ticket t
+        WHERE t.deleted = 0
+          AND t.overdue = 0
+          AND t.due_time IS NOT NULL
+          AND t.due_time &lt; #{now}
+          AND t.status IN ('PENDING_ASSIGN', 'PENDING_PROCESS', 'PROCESSING', 'PENDING_CONFIRM')
+        ORDER BY t.due_time ASC, t.id ASC
+        LIMIT #{limit}
+    </select>
+
+    <insert id="insert">
+        INSERT INTO ticket (
+          id, ticket_no, title, description, category_id, priority, status, creator_id,
+          assignee_id, team_id, due_time, completed_time, closed_time, overdue, tags,
+          create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{ticketNo}, #{title}, #{description}, #{categoryId}, #{priority}, #{status}, #{creatorId},
+          #{assigneeId}, #{teamId}, #{dueTime}, #{completedTime}, #{closedTime}, #{overdue}, #{tags},
+          #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE ticket
+        SET ticket_no = #{ticketNo},
+            title = #{title},
+            description = #{description},
+            category_id = #{categoryId},
+            priority = #{priority},
+            status = #{status},
+            assignee_id = #{assigneeId},
+            team_id = #{teamId},
+            due_time = #{dueTime},
+            completed_time = #{completedTime},
+            closed_time = #{closedTime},
+            overdue = #{overdue},
+            tags = #{tags},
+            update_by = #{updateBy},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
+
+    <update id="markOverdue">
+        UPDATE ticket
+        SET overdue = 1,
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+          AND overdue = 0
+    </update>
+
     <select id="search" resultType="com.opsdesk.ticket.entity.Ticket">
         SELECT t.id, t.ticket_no, t.title, t.description, t.category_id, t.priority, t.status,
                t.creator_id, t.assignee_id, t.team_id, t.due_time, t.completed_time, t.closed_time,
@@ -100,5 +157,90 @@
           AND t.create_time &lt;= #{createdTo}
         </if>
         ORDER BY t.create_time DESC, t.id DESC
+    </select>
+
+    <select id="countWorkbenchByStatus" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket t
+        WHERE t.deleted = 0
+          AND (
+            #{admin} = TRUE
+            OR t.creator_id = #{currentUserId}
+            OR t.assignee_id = #{currentUserId}
+            OR EXISTS (
+              SELECT 1
+              FROM team_member tm
+              WHERE tm.team_id = t.team_id
+                AND tm.user_id = #{currentUserId}
+                AND tm.deleted = 0
+            )
+          )
+        <if test="teamId != null">
+          AND t.team_id = #{teamId}
+        </if>
+        <if test="status != null and status != ''">
+          AND t.status = #{status}
+        </if>
+        <if test="overdue != null">
+          AND t.overdue = #{overdue}
+          AND t.status IN ('PENDING_ASSIGN', 'PENDING_PROCESS', 'PROCESSING', 'PENDING_CONFIRM')
+        </if>
+    </select>
+
+    <select id="countWorkbenchCreated" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket t
+        WHERE t.deleted = 0
+          AND t.creator_id = #{currentUserId}
+        <if test="teamId != null">
+          AND t.team_id = #{teamId}
+        </if>
+    </select>
+
+    <select id="countWorkbenchAssigned" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket t
+        WHERE t.deleted = 0
+          AND t.assignee_id = #{currentUserId}
+          AND t.status IN ('PENDING_PROCESS', 'PROCESSING', 'PENDING_CONFIRM')
+        <if test="teamId != null">
+          AND t.team_id = #{teamId}
+        </if>
+    </select>
+
+    <select id="countWorkbenchWatching" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket_watch tw
+        INNER JOIN ticket t ON t.id = tw.ticket_id AND t.deleted = 0
+        WHERE tw.user_id = #{currentUserId}
+          AND tw.deleted = 0
+        <if test="teamId != null">
+          AND t.team_id = #{teamId}
+        </if>
+    </select>
+
+    <select id="findWorkbenchLatest" resultType="com.opsdesk.ticket.entity.Ticket">
+        SELECT t.id, t.ticket_no, t.title, t.description, t.category_id, t.priority, t.status,
+               t.creator_id, t.assignee_id, t.team_id, t.due_time, t.completed_time, t.closed_time,
+               t.overdue, t.tags, t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
+        FROM ticket t
+        WHERE t.deleted = 0
+          AND (
+            #{admin} = TRUE
+            OR t.creator_id = #{currentUserId}
+            OR t.assignee_id = #{currentUserId}
+            OR EXISTS (
+              SELECT 1
+              FROM team_member tm
+              WHERE tm.team_id = t.team_id
+                AND tm.user_id = #{currentUserId}
+                AND tm.deleted = 0
+            )
+          )
+        <if test="teamId != null">
+          AND t.team_id = #{teamId}
+        </if>
+        ORDER BY t.update_time DESC, t.id DESC
+        LIMIT #{limit}
     </select>
 </mapper>

@@ -1,10 +1,8 @@
 package com.opsdesk.team.mapper;
 
 import com.opsdesk.team.entity.Team;
-import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -29,37 +27,10 @@ public interface TeamMapper {
                       @Param("departmentId") Long departmentId,
                       @Param("enabled") Integer enabled);
 
-    @Insert("""
-            INSERT INTO team (
-              id, name, description, processing_scope, enabled, create_by, update_by, deleted
-            )
-            VALUES (
-              #{id}, #{name}, #{description}, #{processingScope}, #{enabled}, #{createBy}, #{updateBy}, 0
-            )
-            """)
     int insert(Team team);
 
-    @Update("""
-            UPDATE team
-            SET name = #{name},
-                description = #{description},
-                processing_scope = #{processingScope},
-                enabled = #{enabled},
-                update_by = #{updateBy},
-                update_time = CURRENT_TIMESTAMP
-            WHERE id = #{id}
-              AND deleted = 0
-            """)
     int update(Team team);
 
-    @Update("""
-            UPDATE team
-            SET deleted = 1,
-                update_by = #{operatorId},
-                update_time = CURRENT_TIMESTAMP
-            WHERE id = #{id}
-              AND deleted = 0
-            """)
     int logicalDelete(@Param("id") Long id,
                       @Param("operatorId") Long operatorId);
 }

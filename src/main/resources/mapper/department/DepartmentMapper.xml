@@ -38,6 +38,37 @@
         ORDER BY sort ASC, id ASC
     </select>
 
+    <insert id="insert">
+        INSERT INTO sys_department (
+          id, parent_id, name, leader_id, sort, enabled, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{parentId}, #{name}, #{leaderId}, #{sort}, #{enabled}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE sys_department
+        SET parent_id = #{parentId},
+            name = #{name},
+            leader_id = #{leaderId},
+            sort = #{sort},
+            enabled = #{enabled},
+            update_by = #{updateBy},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
+
+    <update id="logicalDelete">
+        UPDATE sys_department
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
+
     <select id="countByParentAndName" resultType="int">
         SELECT COUNT(1)
         FROM sys_department

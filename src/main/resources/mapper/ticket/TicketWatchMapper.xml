@@ -11,4 +11,32 @@
           AND user_id = #{userId}
           AND deleted = 0
     </select>
+    <insert id="insert">
+        INSERT INTO ticket_watch (
+          id, ticket_id, user_id, create_by, update_by, deleted
+        )
+        VALUES (
+          #{id}, #{ticketId}, #{userId}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
+    <update id="restoreDeleted">
+        UPDATE ticket_watch
+        SET deleted = 0,
+            update_by = #{updateBy},
+            update_time = CURRENT_TIMESTAMP
+        WHERE ticket_id = #{ticketId}
+          AND user_id = #{userId}
+          AND deleted = 1
+    </update>
+
+    <update id="logicalDelete">
+        UPDATE ticket_watch
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE ticket_id = #{ticketId}
+          AND user_id = #{userId}
+          AND deleted = 0
+    </update>
 </mapper>
