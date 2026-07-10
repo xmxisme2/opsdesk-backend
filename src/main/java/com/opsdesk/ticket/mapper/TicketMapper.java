@@ -1,6 +1,9 @@
 package com.opsdesk.ticket.mapper;
 
 import com.opsdesk.ticket.entity.Ticket;
+import com.opsdesk.dashboard.mapper.DashboardAgentRankingRow;
+import com.opsdesk.dashboard.mapper.DashboardDistributionRow;
+import com.opsdesk.dashboard.mapper.DashboardTrendRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -60,6 +63,62 @@ public interface TicketMapper {
                                      @Param("currentUserId") Long currentUserId,
                                      @Param("admin") boolean admin,
                                      @Param("limit") int limit);
+
+    long countDashboardCreated(@Param("dateFrom") LocalDateTime dateFrom,
+                               @Param("dateTo") LocalDateTime dateTo,
+                               @Param("teamId") Long teamId,
+                               @Param("currentUserId") Long currentUserId,
+                               @Param("admin") boolean admin);
+
+    long countDashboardByStatusGroup(@Param("statuses") List<String> statuses,
+                                     @Param("dateFrom") LocalDateTime dateFrom,
+                                     @Param("dateTo") LocalDateTime dateTo,
+                                     @Param("teamId") Long teamId,
+                                     @Param("currentUserId") Long currentUserId,
+                                     @Param("admin") boolean admin);
+
+    long countDashboardOverdue(@Param("dateFrom") LocalDateTime dateFrom,
+                               @Param("dateTo") LocalDateTime dateTo,
+                               @Param("teamId") Long teamId,
+                               @Param("currentUserId") Long currentUserId,
+                               @Param("admin") boolean admin);
+
+    Double avgDashboardProcessHours(@Param("dateFrom") LocalDateTime dateFrom,
+                                    @Param("dateTo") LocalDateTime dateTo,
+                                    @Param("teamId") Long teamId,
+                                    @Param("currentUserId") Long currentUserId,
+                                    @Param("admin") boolean admin);
+
+    long countDashboardTotal(@Param("dateFrom") LocalDateTime dateFrom,
+                             @Param("dateTo") LocalDateTime dateTo,
+                             @Param("teamId") Long teamId,
+                             @Param("currentUserId") Long currentUserId,
+                             @Param("admin") boolean admin);
+
+    List<DashboardTrendRow> findDashboardTrends(@Param("dateFrom") LocalDateTime dateFrom,
+                                                @Param("dateTo") LocalDateTime dateTo,
+                                                @Param("teamId") Long teamId,
+                                                @Param("currentUserId") Long currentUserId,
+                                                @Param("admin") boolean admin);
+
+    List<DashboardDistributionRow> findDashboardDistribution(@Param("dimension") String dimension,
+                                                            @Param("dateFrom") LocalDateTime dateFrom,
+                                                            @Param("dateTo") LocalDateTime dateTo,
+                                                            @Param("teamId") Long teamId,
+                                                            @Param("currentUserId") Long currentUserId,
+                                                            @Param("admin") boolean admin);
+
+    List<DashboardAgentRankingRow> findDashboardAgentRanking(@Param("dateFrom") LocalDateTime dateFrom,
+                                                             @Param("dateTo") LocalDateTime dateTo,
+                                                             @Param("teamId") Long teamId,
+                                                             @Param("currentUserId") Long currentUserId,
+                                                             @Param("admin") boolean admin,
+                                                             @Param("limit") int limit);
+
+    List<Ticket> findDashboardOverdueTickets(@Param("teamId") Long teamId,
+                                             @Param("priority") String priority,
+                                             @Param("currentUserId") Long currentUserId,
+                                             @Param("admin") boolean admin);
 
     int insert(Ticket ticket);
 

@@ -125,9 +125,11 @@
         <if test="ticketNo != null and ticketNo != ''">
           AND t.ticket_no LIKE CONCAT('%', #{ticketNo}, '%')
         </if>
+        <!-- 关键词搜索同时覆盖工单编号、标题和问题描述，供看板与工作台的统一搜索入口使用。 -->
         <if test="keyword != null and keyword != ''">
-          AND (t.title LIKE CONCAT('%', #{keyword}, '%')
-               OR t.description LIKE CONCAT('%', #{keyword}, '%'))
+            AND (t.ticket_no LIKE CONCAT('%', #{keyword}, '%')
+                 OR t.title LIKE CONCAT('%', #{keyword}, '%')
+                 OR t.description LIKE CONCAT('%', #{keyword}, '%'))
         </if>
         <if test="status != null and status != ''">
           AND t.status = #{status}
@@ -242,5 +244,156 @@
         </if>
         ORDER BY t.update_time DESC, t.id DESC
         LIMIT #{limit}
+    </select>
+
+    <!-- 数据看板可见范围：管理员看全局，普通负责人按创建人、处理人或团队成员关系收敛。 -->
+    <sql id="DashboardScope">
+        t.deleted = 0
+        AND (
+          #{admin} = TRUE
+          OR t.creator_id = #{currentUserId}
+          OR t.assignee_id = #{currentUserId}
+          OR EXISTS (
+            SELECT 1
+            FROM team_member tm
+            WHERE tm.team_id = t.team_id
+              AND tm.user_id = #{currentUserId}
+              AND tm.deleted = 0
+          )
+        )
+        <if test="teamId != null">
+          AND t.team_id = #{teamId}
+        </if>
+    </sql>
+
+    <sql id="DashboardDateRange">
+        <if test="dateFrom != null">
+          AND t.create_time &gt;= #{dateFrom}
+        </if>
+        <if test="dateTo != null">
+          AND t.create_time &lt; #{dateTo}
+        </if>
+    </sql>
+
+    <select id="countDashboardCreated" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket t
+        WHERE <include refid="DashboardScope"/>
+          AND t.create_time &gt;= #{dateFrom}
+          AND t.create_time &lt; #{dateTo}
+    </select>
+
+    <select id="countDashboardByStatusGroup" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket t
+        WHERE <include refid="DashboardScope"/>
+          AND t.status IN
+          <foreach collection="statuses" item="status" open="(" separator="," close=")">
+            #{status}
+          </foreach>
+          <include refid="DashboardDateRange"/>
+    </select>
+
+    <select id="countDashboardOverdue" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket t
+        WHERE <include refid="DashboardScope"/>
+          AND t.overdue = 1
+          AND t.status IN ('PENDING_ASSIGN', 'PENDING_PROCESS', 'PROCESSING', 'PENDING_CONFIRM')
+          <include refid="DashboardDateRange"/>
+    </select>
+
+    <select id="avgDashboardProcessHours" resultType="double">
+        SELECT AVG(TIMESTAMPDIFF(MINUTE, t.create_time, t.completed_time) / 60)
+        FROM ticket t
+        WHERE <include refid="DashboardScope"/>
+          AND t.completed_time IS NOT NULL
+          AND t.status IN ('COMPLETED', 'CLOSED')
+          <include refid="DashboardDateRange"/>
+    </select>
+
+    <select id="countDashboardTotal" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket t
+        WHERE <include refid="DashboardScope"/>
+          <include refid="DashboardDateRange"/>
+    </select>
+
+    <select id="findDashboardTrends" resultType="com.opsdesk.dashboard.mapper.DashboardTrendRow">
+        SELECT DATE_FORMAT(t.create_time, '%Y-%m-%d') AS stat_date,
+               COUNT(1) AS created_count,
+               SUM(CASE WHEN t.status IN ('COMPLETED', 'CLOSED') THEN 1 ELSE 0 END) AS completed_count,
+               SUM(CASE WHEN t.overdue = 1 THEN 1 ELSE 0 END) AS overdue_count
+        FROM ticket t
+        WHERE <include refid="DashboardScope"/>
+          AND t.create_time &gt;= #{dateFrom}
+          AND t.create_time &lt; #{dateTo}
+        GROUP BY DATE_FORMAT(t.create_time, '%Y-%m-%d')
+        ORDER BY stat_date ASC
+    </select>
+
+    <select id="findDashboardDistribution" resultType="com.opsdesk.dashboard.mapper.DashboardDistributionRow">
+        <choose>
+            <when test="'category'.equals(dimension)">
+                SELECT COALESCE(tc.name, '未分类') AS name,
+                       COUNT(1) AS value
+                FROM ticket t
+                LEFT JOIN ticket_category tc ON tc.id = t.category_id AND tc.deleted = 0
+                WHERE <include refid="DashboardScope"/>
+                  <include refid="DashboardDateRange"/>
+                GROUP BY COALESCE(tc.name, '未分类')
+                ORDER BY value DESC
+            </when>
+            <when test="'priority'.equals(dimension)">
+                SELECT t.priority AS name,
+                       COUNT(1) AS value
+                FROM ticket t
+                WHERE <include refid="DashboardScope"/>
+                  <include refid="DashboardDateRange"/>
+                GROUP BY t.priority
+                ORDER BY FIELD(t.priority, 'URGENT', 'HIGH', 'MEDIUM', 'LOW')
+            </when>
+            <otherwise>
+                SELECT t.status AS name,
+                       COUNT(1) AS value
+                FROM ticket t
+                WHERE <include refid="DashboardScope"/>
+                  <include refid="DashboardDateRange"/>
+                GROUP BY t.status
+                ORDER BY value DESC
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="findDashboardAgentRanking" resultType="com.opsdesk.dashboard.mapper.DashboardAgentRankingRow">
+        SELECT u.id AS user_id,
+               COALESCE(NULLIF(u.nickname, ''), u.username) AS user_name,
+               COUNT(1) AS completed_count,
+               AVG(TIMESTAMPDIFF(MINUTE, t.create_time, t.completed_time) / 60) AS avg_process_duration,
+               SUM(CASE WHEN t.overdue = 1 THEN 1 ELSE 0 END) AS overdue_count
+        FROM ticket t
+        INNER JOIN sys_user u ON u.id = t.assignee_id AND u.deleted = 0
+        WHERE <include refid="DashboardScope"/>
+          AND t.assignee_id IS NOT NULL
+          AND t.completed_time IS NOT NULL
+          AND t.status IN ('COMPLETED', 'CLOSED')
+          <include refid="DashboardDateRange"/>
+        GROUP BY u.id, COALESCE(NULLIF(u.nickname, ''), u.username)
+        ORDER BY completed_count DESC, avg_process_duration ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findDashboardOverdueTickets" resultType="com.opsdesk.ticket.entity.Ticket">
+        SELECT t.id, t.ticket_no, t.title, t.description, t.category_id, t.priority, t.status,
+               t.creator_id, t.assignee_id, t.team_id, t.due_time, t.completed_time, t.closed_time,
+               t.overdue, t.tags, t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
+        FROM ticket t
+        WHERE <include refid="DashboardScope"/>
+          AND t.overdue = 1
+          AND t.status IN ('PENDING_ASSIGN', 'PENDING_PROCESS', 'PROCESSING', 'PENDING_CONFIRM')
+        <if test="priority != null and priority != ''">
+          AND t.priority = #{priority}
+        </if>
+        ORDER BY t.due_time ASC, t.create_time DESC, t.id DESC
     </select>
 </mapper>
