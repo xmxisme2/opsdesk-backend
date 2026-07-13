@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.system.mapper.NotificationTemplateMapper">
+    <sql id="Columns">id, type, channel, title_template, content_template, enabled, create_time, update_time</sql>
+    <select id="search" resultType="com.opsdesk.system.entity.NotificationTemplate">
+        SELECT <include refid="Columns"/> FROM notification_template WHERE deleted = 0
+        <if test="type != null and type != ''">AND type = #{type}</if>
+        <if test="channel != null and channel != ''">AND channel = #{channel}</if>
+        ORDER BY id ASC
+    </select>
+    <select id="findById" resultType="com.opsdesk.system.entity.NotificationTemplate">
+        SELECT <include refid="Columns"/> FROM notification_template WHERE id = #{id} AND deleted = 0 LIMIT 1
+    </select>
+    <update id="update">
+        UPDATE notification_template SET title_template=#{titleTemplate}, content_template=#{contentTemplate},
+          enabled=#{enabled}, update_by=#{updateBy}, update_time=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND deleted=0
+    </update>
+</mapper>

@@ -43,8 +43,6 @@ import java.util.regex.Pattern;
 public class AttachmentServiceImpl implements AttachmentService {
 
     /** 单工单附件上限：包含工单直接附件和所属评论附件，来自附件需求，禁止外部覆盖。 */
-    private static final long MAX_FILES_PER_TICKET = 10L;
-
     /** 文本预览最大字节数：最多读取前 1MB，超出时返回 truncated=true。 */
     private static final int MAX_TEXT_PREVIEW_BYTES = 1024 * 1024;
 
@@ -265,8 +263,9 @@ public class AttachmentServiceImpl implements AttachmentService {
         if (attachmentMapper.lockTicket(ticketId) == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "工单不存在");
         }
-        if (attachmentMapper.countActiveByTicketScope(ticketId) >= MAX_FILES_PER_TICKET) {
-            throw new BusinessException(ErrorCode.STATE_CONFLICT, "单个工单最多上传10个附件");
+        int maxFiles = filePolicy.maxFilesPerTicket();
+        if (attachmentMapper.countActiveByTicketScope(ticketId) >= maxFiles) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "单个工单最多上传" + maxFiles + "个附件");
         }
     }
 

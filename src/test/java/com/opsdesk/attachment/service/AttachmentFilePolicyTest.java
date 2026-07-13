@@ -3,6 +3,9 @@ package com.opsdesk.attachment.service;
 import com.opsdesk.attachment.model.ValidatedAttachmentFile;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
+import com.opsdesk.system.service.UploadPolicyService;
+import com.opsdesk.system.vo.UploadPolicyVO;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -21,7 +24,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class AttachmentFilePolicyTest {
 
-    private final AttachmentFilePolicy filePolicy = new AttachmentFilePolicy();
+    private AttachmentFilePolicy filePolicy;
+
+    @BeforeEach
+    void setUp() {
+        UploadPolicyService service = org.mockito.Mockito.mock(UploadPolicyService.class);
+        org.mockito.Mockito.when(service.detail()).thenReturn(new UploadPolicyVO(20, 10,
+                java.util.List.of("jpg", "jpeg", "png", "pdf", "docx", "xlsx", "txt", "log", "zip"),
+                java.util.List.of("jpg", "jpeg", "png", "txt", "log"),
+                java.util.List.of("pdf", "docx", "xlsx", "zip")));
+        filePolicy = new AttachmentFilePolicy(service);
+    }
 
     @Test
     void validateShouldClassifyPngAsImagePreview() {

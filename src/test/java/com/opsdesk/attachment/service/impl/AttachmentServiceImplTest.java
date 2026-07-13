@@ -15,6 +15,8 @@ import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
 import com.opsdesk.common.security.CurrentUser;
+import com.opsdesk.system.service.UploadPolicyService;
+import com.opsdesk.system.vo.UploadPolicyVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,14 +60,20 @@ class AttachmentServiceImplTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private UploadPolicyService uploadPolicyService;
+
     private AttachmentServiceImpl attachmentService;
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(uploadPolicyService.detail()).thenReturn(new UploadPolicyVO(20, 10,
+                List.of("jpg", "jpeg", "png", "pdf", "docx", "xlsx", "txt", "log", "zip"),
+                List.of("jpg", "jpeg", "png", "txt", "log"), List.of("pdf", "docx", "xlsx", "zip")));
         attachmentService = new AttachmentServiceImpl(
                 attachmentMapper,
                 attachmentStorage,
-                new AttachmentFilePolicy(),
+                new AttachmentFilePolicy(uploadPolicyService),
                 resourceAccessService,
                 new AttachmentConverter(),
                 new SnowflakeIdGenerator(),

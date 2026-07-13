@@ -3,6 +3,8 @@ package com.opsdesk.attachment.service;
 import com.opsdesk.attachment.model.ValidatedAttachmentFile;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
+import com.opsdesk.system.service.UploadPolicyService;
+import com.opsdesk.system.vo.UploadPolicyVO;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,7 +26,13 @@ import java.util.zip.ZipInputStream;
 public class AttachmentFilePolicy {
 
     /** 单文件最大字节数：20MB，来自附件需求，禁止外部请求覆盖。 */
-    public static final long MAX_FILE_SIZE_BYTES = 20L * 1024L * 1024L;
+    public static final long DEFAULT_MAX_FILE_SIZE_BYTES = 20L * 1024L * 1024L;
+
+    private final UploadPolicyService uploadPolicyService;
+
+    public AttachmentFilePolicy(UploadPolicyService uploadPolicyService) {
+        this.uploadPolicyService = uploadPolicyService;
+    }
 
     /** 图片预览类型：jpg、jpeg、png 使用，允许前端请求受保护的图片流。 */
     public static final String PREVIEW_TYPE_IMAGE = "IMAGE";
@@ -61,15 +69,16 @@ public class AttachmentFilePolicy {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "上传文件不能为空");
         }
-        if (file.getSize() > MAX_FILE_SIZE_BYTES) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "单个文件不能超过20MB");
+        UploadPolicyVO policy = uploadPolicyService.detail();
+        if (file.getSize() > policy.maxFileSizeMb() * 1024L * 1024L) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "单个文件不能超过" + policy.maxFileSizeMb() + "MB");
         }
 
         String fileName = normalizeFileName(file.getOriginalFilename());
         String extension = extractExtension(fileName);
         String contentType = normalizeContentType(file.getContentType());
         Set<String> allowedMimeTypes = ALLOWED_MIME_TYPES.get(extension);
-        if (allowedMimeTypes == null) {
+        if (allowedMimeTypes == null || !policy.allowedExtensions().contains(extension)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "不支持的文件扩展名");
         }
         if (!allowedMimeTypes.contains(contentType)) {
@@ -77,7 +86,7 @@ public class AttachmentFilePolicy {
         }
         validateContentSignature(file, extension);
 
-        String previewType = previewType(extension);
+        String previewType = previewType(extension, policy);
         boolean previewable = !PREVIEW_TYPE_DOWNLOAD_ONLY.equals(previewType);
         return new ValidatedAttachmentFile(
                 fileName,
@@ -179,7 +188,14 @@ public class AttachmentFilePolicy {
         return true;
     }
 
-    private String previewType(String extension) {
+    public int maxFilesPerTicket() {
+        return uploadPolicyService.detail().maxFilesPerTicket();
+    }
+
+    private String previewType(String extension, UploadPolicyVO policy) {
+        if (!policy.previewableExtensions().contains(extension)) {
+            return PREVIEW_TYPE_DOWNLOAD_ONLY;
+        }
         if (IMAGE_EXTENSIONS.contains(extension)) {
             return PREVIEW_TYPE_IMAGE;
         }

@@ -269,9 +269,9 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO notification_template (id, type, channel, title_template, content_template, enabled, create_by, update_by)
 VALUES
-  (1, 'TICKET_ASSIGNED', 'IN_APP', '工单已分派', '工单 {ticketNo} 已分派给你，请及时处理。', 1, NULL, NULL),
+  (1, 'TICKET_ASSIGNED', 'IN_APP', '工单已分派', '{operatorName} 将工单 {ticketNo} 分派给 {assignee}，请及时处理。', 1, NULL, NULL),
   (2, 'TICKET_COMMENTED', 'IN_APP', '工单有新评论', '工单 {ticketNo} 收到新评论，请查看。', 1, NULL, NULL),
-  (3, 'TICKET_STATUS_CHANGED', 'IN_APP', '工单状态已变更', '工单 {ticketNo} 状态已变更为 {status}。', 1, NULL, NULL),
+  (3, 'TICKET_STATUS_CHANGED', 'IN_APP', '工单状态已变更', '{operatorName} 将工单 {ticketNo} 状态变更为 {status}。', 1, NULL, NULL),
   (4, 'TICKET_OVERDUE', 'IN_APP', '工单已超时', '工单 {ticketNo} 已超时，请尽快跟进。', 1, NULL, NULL),
   (5, 'TICKET_CLOSED', 'IN_APP', '工单已关闭', '工单 {ticketNo} 已关闭归档。', 1, NULL, NULL)
 ON DUPLICATE KEY UPDATE
@@ -286,7 +286,9 @@ VALUES
   (2, 'notification.in_app.enabled', 'true', 'NOTIFICATION', '站内通知开关', 1, 0, NULL, NULL),
   (3, 'upload.max_file_size_mb', '20', 'UPLOAD', '单文件最大大小 MB', 1, 0, NULL, NULL),
   (4, 'upload.max_files_per_ticket', '10', 'UPLOAD', '单工单最大附件数量', 1, 0, NULL, NULL),
-  (5, 'upload.allowed_extensions', 'jpg,jpeg,png,pdf,docx,xlsx,txt,log,zip', 'UPLOAD', '允许上传的扩展名', 1, 0, NULL, NULL)
+  (5, 'upload.allowed_extensions', 'jpg,jpeg,png,pdf,docx,xlsx,txt,log,zip', 'UPLOAD', '允许上传的扩展名', 1, 0, NULL, NULL),
+  (6, 'upload.previewable_extensions', 'jpg,jpeg,png,txt,log', 'UPLOAD', '允许安全预览的扩展名', 1, 0, NULL, NULL),
+  (7, 'upload.download_only_extensions', 'pdf,docx,xlsx,zip', 'UPLOAD', '仅允许下载的扩展名', 1, 0, NULL, NULL)
 ON DUPLICATE KEY UPDATE
   config_value = VALUES(config_value),
   description = VALUES(description),
