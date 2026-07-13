@@ -58,6 +58,17 @@
         ORDER BY tm.leader_flag DESC, tm.create_time ASC, tm.user_id ASC
     </select>
 
+    <select id="searchCandidateUsers" resultType="com.opsdesk.user.entity.SysUser">
+        SELECT id, phone, username, nickname, email, gender, avatar_code, avatar_url,
+               department_id, status, create_time, update_time, create_by, update_by, deleted
+        FROM sys_user
+        WHERE deleted = 0 AND status = 'ACTIVE'
+        <if test="keyword != null and keyword != ''">
+          AND (phone LIKE CONCAT('%', #{keyword}, '%') OR username LIKE CONCAT('%', #{keyword}, '%') OR nickname LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY nickname ASC, id ASC
+    </select>
+
     <select id="countActive" resultType="int">
         SELECT COUNT(1)
         FROM team_member

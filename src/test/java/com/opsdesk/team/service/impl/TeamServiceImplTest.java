@@ -4,6 +4,7 @@ import com.opsdesk.audit.service.AuditLogService;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
+import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.team.dto.TeamCreateRequest;
 import com.opsdesk.team.dto.TeamLeaderUpdateRequest;
 import com.opsdesk.team.dto.TeamMemberUpdateRequest;
@@ -82,12 +83,29 @@ class TeamServiceImplTest {
         item.setLeader(false);
         request.setMembers(List.of(item));
 
-        assertThatThrownBy(() -> teamService.updateMembers("1", request, 1L, "127.0.0.1", "JUnit"))
+        assertThatThrownBy(() -> teamService.updateMembers("1", request, admin(), "127.0.0.1", "JUnit"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PARAM_ERROR);
 
         verify(teamMemberMapper, never()).deactivateMissing(any(), any(), any());
+    }
+
+    @Test
+    void managerShouldNotChangeLeaderSetWhenUpdatingMembers() {
+        when(teamMapper.findById(1L)).thenReturn(existingTeam());
+        when(teamMemberMapper.countLeader(1L, 2L)).thenReturn(1);
+        when(teamMemberMapper.findLeaderIdsByTeamId(1L)).thenReturn(List.of(2L));
+        TeamMemberUpdateRequest request = new TeamMemberUpdateRequest();
+        TeamMemberUpdateRequest.MemberItem item = new TeamMemberUpdateRequest.MemberItem();
+        item.setUserId("3");
+        item.setLeader(true);
+        request.setMembers(List.of(item));
+
+        assertThatThrownBy(() -> teamService.updateMembers("1", request, manager(), "127.0.0.1", "JUnit"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FORBIDDEN);
     }
 
     @Test
@@ -125,5 +143,13 @@ class TeamServiceImplTest {
         team.setName("基础设施支持组");
         team.setEnabled(1);
         return team;
+    }
+
+    private CurrentUser admin() {
+        return new CurrentUser(1L, "13800000000", "admin", List.of("ADMIN"), List.of());
+    }
+
+    private CurrentUser manager() {
+        return new CurrentUser(2L, "13800000001", "manager", List.of("MANAGER"), List.of());
     }
 }
