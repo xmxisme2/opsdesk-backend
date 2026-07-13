@@ -14,4 +14,53 @@
           #{createBy}, #{updateBy}, 0
         )
     </insert>
+
+    <!-- 后台审计日志检索：显式列出字段并关联操作人名称，分页由 PageHelper 追加。 -->
+    <select id="search" resultType="com.opsdesk.audit.entity.AuditLog">
+        SELECT
+          al.id,
+          al.operator_id,
+          COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone, '系统任务') AS operator_name,
+          al.operation_type,
+          al.biz_type,
+          al.biz_id,
+          al.content,
+          al.request_ip,
+          al.user_agent,
+          al.create_time,
+          al.create_by,
+          al.update_by
+        FROM audit_log al
+        LEFT JOIN sys_user u ON u.id = al.operator_id AND u.deleted = 0
+        WHERE al.deleted = 0
+        <if test="operatorId != null">
+          AND al.operator_id = #{operatorId}
+        </if>
+        <if test="operationType != null and operationType != ''">
+          AND al.operation_type = #{operationType}
+        </if>
+        <if test="bizType != null and bizType != ''">
+          AND al.biz_type = #{bizType}
+        </if>
+        <if test="bizId != null">
+          AND al.biz_id = #{bizId}
+        </if>
+        <if test="dateFrom != null">
+          AND al.create_time &gt;= #{dateFrom}
+        </if>
+        <if test="dateTo != null">
+          AND al.create_time &lt;= #{dateTo}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND (
+            al.content LIKE CONCAT('%', #{keyword}, '%')
+            OR al.operation_type LIKE CONCAT('%', #{keyword}, '%')
+            OR al.biz_type LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(u.nickname, '') LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(u.username, '') LIKE CONCAT('%', #{keyword}, '%')
+            OR COALESCE(u.phone, '') LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        ORDER BY al.create_time DESC, al.id DESC
+    </select>
 </mapper>

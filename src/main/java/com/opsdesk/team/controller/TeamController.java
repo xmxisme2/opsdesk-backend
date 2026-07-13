@@ -111,7 +111,7 @@ public class TeamController {
     }
 
     @PostMapping("/{id}/members/search")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @RateLimit(limit = RateLimitDefaults.SEARCH_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
             keyType = RateLimitKeyType.USER)

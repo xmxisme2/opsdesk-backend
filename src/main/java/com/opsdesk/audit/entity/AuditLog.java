@@ -14,6 +14,8 @@ public class AuditLog {
 
     private Long id;
     private Long operatorId;
+    /** 操作人展示名称：查询时关联用户表填充，不对应 audit_log 独立字段。 */
+    private String operatorName;
     private String operationType;
     private String bizType;
     private Long bizId;
@@ -22,4 +24,5 @@ public class AuditLog {
     private String userAgent;
     private Long createBy;
     private Long updateBy;
+    private java.time.LocalDateTime createTime;
 }

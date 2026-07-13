@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.system.mapper.SlaRuleMapper">
+    <sql id="SlaRuleColumns">
+        id, category_id, priority, response_hours, resolve_hours, enabled,
+        create_time, update_time, create_by, update_by, deleted
+    </sql>
+    <select id="search" resultType="com.opsdesk.system.entity.SlaRule">
+        SELECT <include refid="SlaRuleColumns"/>
+        FROM sla_rule
+        WHERE deleted = 0
+        <if test="categoryId != null">AND category_id = #{categoryId}</if>
+        <if test="priority != null and priority != ''">AND priority = #{priority}</if>
+        <if test="enabled != null">AND enabled = #{enabled}</if>
+        ORDER BY category_id ASC, FIELD(priority, 'URGENT', 'HIGH', 'MEDIUM', 'LOW'), id ASC
+    </select>
+    <select id="findById" resultType="com.opsdesk.system.entity.SlaRule">
+        SELECT <include refid="SlaRuleColumns"/> FROM sla_rule WHERE id = #{id} AND deleted = 0 LIMIT 1
+    </select>
+    <select id="findByCategoryAndPriority" resultType="com.opsdesk.system.entity.SlaRule">
+        SELECT <include refid="SlaRuleColumns"/>
+        FROM sla_rule
+        WHERE category_id = #{categoryId} AND priority = #{priority} AND deleted = 0
+        <if test="excludeId != null">AND id != #{excludeId}</if>
+        LIMIT 1
+    </select>
+    <insert id="insert">
+        INSERT INTO sla_rule (id, category_id, priority, response_hours, resolve_hours, enabled, create_by, update_by, deleted)
+        VALUES (#{id}, #{categoryId}, #{priority}, #{responseHours}, #{resolveHours}, #{enabled}, #{createBy}, #{updateBy}, 0)
+    </insert>
+    <update id="update">
+        UPDATE sla_rule SET category_id=#{categoryId}, priority=#{priority}, response_hours=#{responseHours},
+          resolve_hours=#{resolveHours}, enabled=#{enabled}, update_by=#{updateBy}, update_time=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND deleted=0
+    </update>
+    <!-- 删除接口按产品口径转为禁用，保留历史规则和唯一约束。 -->
+    <update id="disable">
+        UPDATE sla_rule SET enabled=0, update_by=#{operatorId}, update_time=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND deleted=0
+    </update>
+</mapper>
