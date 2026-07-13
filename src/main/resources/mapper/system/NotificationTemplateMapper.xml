@@ -11,6 +11,10 @@
     <select id="findById" resultType="com.opsdesk.system.entity.NotificationTemplate">
         SELECT <include refid="Columns"/> FROM notification_template WHERE id = #{id} AND deleted = 0 LIMIT 1
     </select>
+    <select id="findByTypeAndChannel" resultType="com.opsdesk.system.entity.NotificationTemplate">
+        SELECT <include refid="Columns"/> FROM notification_template
+        WHERE type=#{type} AND channel=#{channel} AND deleted=0 LIMIT 1
+    </select>
     <update id="update">
         UPDATE notification_template SET title_template=#{titleTemplate}, content_template=#{contentTemplate},
           enabled=#{enabled}, update_by=#{updateBy}, update_time=CURRENT_TIMESTAMP

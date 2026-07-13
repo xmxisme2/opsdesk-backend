@@ -5,6 +5,8 @@ import com.opsdesk.team.mapper.TeamMemberMapper;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.mapper.TicketMapper;
 import com.opsdesk.ticket.service.TicketOverdueScanService;
+import com.opsdesk.user.entity.SysUser;
+import com.opsdesk.user.mapper.SysUserMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -12,6 +14,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 工单超时扫描服务实现。
@@ -32,13 +35,16 @@ public class TicketOverdueScanServiceImpl implements TicketOverdueScanService {
 
     private final TicketMapper ticketMapper;
     private final TeamMemberMapper teamMemberMapper;
+    private final SysUserMapper sysUserMapper;
     private final NotificationService notificationService;
 
     public TicketOverdueScanServiceImpl(TicketMapper ticketMapper,
                                         TeamMemberMapper teamMemberMapper,
+                                        SysUserMapper sysUserMapper,
                                         NotificationService notificationService) {
         this.ticketMapper = ticketMapper;
         this.teamMemberMapper = teamMemberMapper;
+        this.sysUserMapper = sysUserMapper;
         this.notificationService = notificationService;
     }
 
@@ -81,12 +87,12 @@ public class TicketOverdueScanServiceImpl implements TicketOverdueScanService {
             }
         }
         receiverIds.remove(null);
-        String content = "工单 " + displayTicketNo(ticket) + " 已超过 SLA 截止时间，请及时处理";
+        String assignee = resolveAssigneeName(ticket.getAssigneeId());
+        Map<String, String> variables = Map.of("ticketNo", displayTicketNo(ticket), "assignee", assignee);
         receiverIds.forEach(receiverId -> notificationService.createTicketNotification(
                 receiverId,
                 NOTIFICATION_TICKET_OVERDUE,
-                OVERDUE_TITLE,
-                content,
+                variables,
                 ticket.getId(),
                 null
         ));
@@ -97,5 +103,19 @@ public class TicketOverdueScanServiceImpl implements TicketOverdueScanService {
             return "-";
         }
         return StringUtils.hasText(ticket.getTicketNo()) ? ticket.getTicketNo() : String.valueOf(ticket.getId());
+    }
+
+    /**
+     * 超时模板中的处理人变量必须是可读姓名，处理人已失效时降级为“待分派”，不泄露内部用户 ID。
+     */
+    private String resolveAssigneeName(Long assigneeId) {
+        if (assigneeId == null) {
+            return "待分派";
+        }
+        SysUser assignee = sysUserMapper.findById(assigneeId);
+        if (assignee == null) {
+            return "待分派";
+        }
+        return StringUtils.hasText(assignee.getNickname()) ? assignee.getNickname() : assignee.getUsername();
     }
 }

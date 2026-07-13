@@ -11,5 +11,6 @@ import java.util.List;
 public interface NotificationTemplateMapper {
     List<NotificationTemplate> search(@Param("type") String type, @Param("channel") String channel);
     NotificationTemplate findById(@Param("id") Long id);
+    NotificationTemplate findByTypeAndChannel(@Param("type") String type, @Param("channel") String channel);
     int update(NotificationTemplate template);
 }

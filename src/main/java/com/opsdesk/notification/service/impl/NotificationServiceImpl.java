@@ -13,6 +13,8 @@ import com.opsdesk.notification.dto.NotificationSearchRequest;
 import com.opsdesk.notification.entity.Notification;
 import com.opsdesk.notification.mapper.NotificationMapper;
 import com.opsdesk.notification.service.NotificationService;
+import com.opsdesk.notification.service.NotificationTemplateRenderService;
+import com.opsdesk.notification.model.RenderedNotification;
 import com.opsdesk.notification.vo.NotificationReadAllVO;
 import com.opsdesk.notification.vo.NotificationUnreadCountVO;
 import com.opsdesk.notification.vo.NotificationVO;
@@ -28,6 +30,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.Map;
 
 /**
  * 通知中心服务实现。
@@ -58,27 +61,43 @@ public class NotificationServiceImpl implements NotificationService {
     private final StringRedisTemplate stringRedisTemplate;
     private final NotificationConverter notificationConverter;
     private final SnowflakeIdGenerator idGenerator;
+    private final NotificationTemplateRenderService templateRenderService;
 
     @Autowired
     public NotificationServiceImpl(NotificationMapper notificationMapper,
-                                   StringRedisTemplate stringRedisTemplate) {
-        this(notificationMapper, stringRedisTemplate, new NotificationConverter(), new SnowflakeIdGenerator());
+                                   StringRedisTemplate stringRedisTemplate,
+                                   NotificationTemplateRenderService templateRenderService) {
+        this(notificationMapper, stringRedisTemplate, new NotificationConverter(), new SnowflakeIdGenerator(), templateRenderService);
+    }
+
+    /** 单元测试兼容构造器；生产环境由带模板渲染服务的构造器注入。 */
+    public NotificationServiceImpl(NotificationMapper notificationMapper, StringRedisTemplate stringRedisTemplate) {
+        this(notificationMapper, stringRedisTemplate, new NotificationConverter(), new SnowflakeIdGenerator(), null);
     }
 
     public NotificationServiceImpl(NotificationMapper notificationMapper,
                                    StringRedisTemplate stringRedisTemplate,
                                    NotificationConverter notificationConverter) {
-        this(notificationMapper, stringRedisTemplate, notificationConverter, new SnowflakeIdGenerator());
+        this(notificationMapper, stringRedisTemplate, notificationConverter, new SnowflakeIdGenerator(), null);
     }
 
     public NotificationServiceImpl(NotificationMapper notificationMapper,
                                    StringRedisTemplate stringRedisTemplate,
                                    NotificationConverter notificationConverter,
                                    SnowflakeIdGenerator idGenerator) {
+        this(notificationMapper, stringRedisTemplate, notificationConverter, idGenerator, null);
+    }
+
+    public NotificationServiceImpl(NotificationMapper notificationMapper,
+                                   StringRedisTemplate stringRedisTemplate,
+                                   NotificationConverter notificationConverter,
+                                   SnowflakeIdGenerator idGenerator,
+                                   NotificationTemplateRenderService templateRenderService) {
         this.notificationMapper = notificationMapper;
         this.stringRedisTemplate = stringRedisTemplate;
         this.notificationConverter = notificationConverter;
         this.idGenerator = idGenerator;
+        this.templateRenderService = templateRenderService;
     }
 
     @Override
@@ -169,6 +188,16 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setDeleted(0);
         notificationMapper.insert(notification);
         stringRedisTemplate.delete(unreadKey(receiverId));
+    }
+
+    @Override
+    public void createTicketNotification(Long receiverId, String type, Map<String, String> variables,
+                                         Long ticketId, Long operatorId) {
+        if (receiverId == null || ticketId == null) return;
+        if (templateRenderService == null) throw new BusinessException(ErrorCode.STATE_CONFLICT, "通知模板渲染服务未初始化");
+        RenderedNotification rendered = templateRenderService.render(type, variables).orElse(null);
+        if (rendered == null) return;
+        createTicketNotification(receiverId, type, rendered.title(), rendered.content(), ticketId, operatorId);
     }
 
     private Notification requireNotification(Long notificationId) {

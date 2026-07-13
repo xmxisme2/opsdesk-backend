@@ -37,6 +37,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -269,14 +270,11 @@ public class TicketCommentServiceImpl implements TicketCommentService {
         }
         receiverIds.remove(null);
         receiverIds.remove(operatorId);
+        SysUser commenter = sysUserMapper.findById(operatorId);
+        String commenterName = commenter == null ? "未知用户" : (StringUtils.hasText(commenter.getNickname()) ? commenter.getNickname() : commenter.getUsername());
+        Map<String, String> variables = Map.of("ticketNo", displayTicketNo(ticket), "commenter", commenterName);
         receiverIds.forEach(receiverId -> notificationService.createTicketNotification(
-                receiverId,
-                NOTIFICATION_TICKET_COMMENTED,
-                "工单有新评论",
-                "工单 " + displayTicketNo(ticket) + " 有新评论",
-                ticket.getId(),
-                operatorId
-        ));
+                receiverId, NOTIFICATION_TICKET_COMMENTED, variables, ticket.getId(), operatorId));
     }
 
     private String displayTicketNo(Ticket ticket) {

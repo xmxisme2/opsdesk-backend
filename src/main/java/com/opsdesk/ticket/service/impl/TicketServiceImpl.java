@@ -57,6 +57,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -330,7 +331,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.ASSIGN), fromStatus, ticket.getStatus(), operatorId,
                 contentOrDefault(request == null ? null : request.getReason(), "分派工单"), requestIp, userAgent);
-        notifyTicketAssignment(ticket, operatorId, "工单已分派", "工单 " + displayTicketNo(ticket) + " 已分派给你或你的团队");
+        notifyTicketAssignment(ticket, operatorId);
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -408,7 +409,7 @@ public class TicketServiceImpl implements TicketService {
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.TRANSFER), fromStatus, ticket.getStatus(), operatorId,
                 request.getReason().trim(), requestIp, userAgent);
-        notifyTicketAssignment(ticket, operatorId, "工单已转派", "工单 " + displayTicketNo(ticket) + " 已转派给你或你的团队");
+        notifyTicketAssignment(ticket, operatorId);
         return assembleTicketVO(ticket, currentUser);
     }
 
@@ -701,28 +702,24 @@ public class TicketServiceImpl implements TicketService {
     /**
      * 工单分派通知：有具体处理人时只通知处理人；仅分派到团队时通知团队负责人。
      */
-    private void notifyTicketAssignment(Ticket ticket, Long operatorId, String title, String content) {
-        notifyTicketReceivers(ticket, operatorId, NOTIFICATION_TICKET_ASSIGNED, title, content, false);
+    private void notifyTicketAssignment(Ticket ticket, Long operatorId) {
+        notifyTicketReceivers(ticket, operatorId, NOTIFICATION_TICKET_ASSIGNED, false);
     }
 
     /**
      * 工单状态通知：通知创建人、当前处理人；没有处理人时补充通知团队负责人。
      */
     private void notifyTicketStatusChanged(Ticket ticket, Long operatorId, String title) {
-        notifyTicketReceivers(ticket, operatorId, NOTIFICATION_TICKET_STATUS_CHANGED, title,
-                "工单 " + displayTicketNo(ticket) + " 当前状态为 " + ticket.getStatus(), true);
+        notifyTicketReceivers(ticket, operatorId, NOTIFICATION_TICKET_STATUS_CHANGED, true);
     }
 
     private void notifyTicketClosed(Ticket ticket, Long operatorId) {
-        notifyTicketReceivers(ticket, operatorId, NOTIFICATION_TICKET_CLOSED, "工单已关闭",
-                "工单 " + displayTicketNo(ticket) + " 已关闭", true);
+        notifyTicketReceivers(ticket, operatorId, NOTIFICATION_TICKET_CLOSED, true);
     }
 
     private void notifyTicketReceivers(Ticket ticket,
                                        Long operatorId,
                                        String type,
-                                       String title,
-                                       String content,
                                        boolean includeCreator) {
         if (notificationService == null || ticket == null) {
             return;
@@ -741,14 +738,31 @@ public class TicketServiceImpl implements TicketService {
         }
         receiverIds.remove(null);
         receiverIds.remove(operatorId);
-        receiverIds.forEach(receiverId -> notificationService.createTicketNotification(
-                receiverId,
-                type,
-                title,
-                content,
-                ticket.getId(),
-                operatorId
-        ));
+        Map<String, String> variables = Map.of(
+                "ticketNo", displayTicketNo(ticket),
+                "assignee", userDisplayName(ticket.getAssigneeId(), "待分派"),
+                "operatorName", userDisplayName(operatorId, "系统"),
+                "status", statusDisplayName(ticket.getStatus())
+        );
+        receiverIds.forEach(receiverId -> notificationService.createTicketNotification(receiverId, type, variables, ticket.getId(), operatorId));
+    }
+
+    /** 通知变量中的用户名称优先显示昵称，其次用户名，系统任务或未知用户使用明确兜底文案。 */
+    private String userDisplayName(Long userId, String fallback) {
+        if (userId == null) return fallback;
+        SysUser user = sysUserMapper.findById(userId);
+        if (user == null) return fallback;
+        return StringUtils.hasText(user.getNickname()) ? user.getNickname() : user.getUsername();
+    }
+
+    /** 将状态编码转换为通知用户可理解的中文状态名称。 */
+    private String statusDisplayName(String status) {
+        if (status == null) return "未知状态";
+        return switch (status) {
+            case "DRAFT" -> "草稿"; case "PENDING_ASSIGN" -> "待分派"; case "PENDING_PROCESS" -> "待处理";
+            case "PROCESSING" -> "处理中"; case "PENDING_CONFIRM" -> "待确认"; case "COMPLETED" -> "已完成";
+            case "CLOSED" -> "已关闭"; case "CANCELLED" -> "已取消"; default -> status;
+        };
     }
 
     private String displayTicketNo(Ticket ticket) {

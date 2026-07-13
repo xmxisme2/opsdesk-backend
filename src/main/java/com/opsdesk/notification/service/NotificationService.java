@@ -7,6 +7,7 @@ import com.opsdesk.notification.dto.NotificationSearchRequest;
 import com.opsdesk.notification.vo.NotificationReadAllVO;
 import com.opsdesk.notification.vo.NotificationUnreadCountVO;
 import com.opsdesk.notification.vo.NotificationVO;
+import java.util.Map;
 
 /**
  * 通知中心服务。
@@ -32,4 +33,7 @@ public interface NotificationService {
                                   String content,
                                   Long ticketId,
                                   Long operatorId);
+
+    /** 按通知类型读取启用模板并渲染变量；模板停用时不创建消息。 */
+    void createTicketNotification(Long receiverId, String type, Map<String, String> variables, Long ticketId, Long operatorId);
 }
