@@ -81,21 +81,48 @@ public class AuditLogServiceImpl implements AuditLogService {
                        String requestIp,
                        String userAgent) {
         try {
-            AuditLog auditLog = new AuditLog();
-            auditLog.setId(idGenerator.nextId());
-            auditLog.setOperatorId(operatorId);
-            auditLog.setOperationType(operationType);
-            auditLog.setBizType(bizType);
-            auditLog.setBizId(bizId);
-            auditLog.setContent(content);
-            auditLog.setRequestIp(requestIp);
-            auditLog.setUserAgent(userAgent);
-            auditLog.setCreateBy(operatorId);
-            auditLog.setUpdateBy(operatorId);
-            auditLogMapper.insert(auditLog);
+            recordStrict(operatorId, operationType, bizType, bizId, content, requestIp, userAgent);
         } catch (Exception exception) {
             LOGGER.warn("写入审计日志失败 operationType={}, bizType={}, bizId={}", operationType, bizType, bizId, exception);
         }
+    }
+
+    /** 严格审计不吞掉 Mapper 异常，确保关键业务事务能够感知失败并回滚。 */
+    @Override
+    public void recordStrict(Long operatorId,
+                             String operationType,
+                             String bizType,
+                             Long bizId,
+                             String content,
+                             String requestIp,
+                             String userAgent) {
+        int affectedRows = auditLogMapper.insert(
+                buildAuditLog(operatorId, operationType, bizType, bizId, content, requestIp, userAgent));
+        if (affectedRows != 1) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "审计日志写入失败");
+        }
+    }
+
+    /** 统一构建审计实体，保证尽力记录与严格记录的字段口径完全一致。 */
+    private AuditLog buildAuditLog(Long operatorId,
+                                   String operationType,
+                                   String bizType,
+                                   Long bizId,
+                                   String content,
+                                   String requestIp,
+                                   String userAgent) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.setId(idGenerator.nextId());
+        auditLog.setOperatorId(operatorId);
+        auditLog.setOperationType(operationType);
+        auditLog.setBizType(bizType);
+        auditLog.setBizId(bizId);
+        auditLog.setContent(content);
+        auditLog.setRequestIp(requestIp);
+        auditLog.setUserAgent(userAgent);
+        auditLog.setCreateBy(operatorId);
+        auditLog.setUpdateBy(operatorId);
+        return auditLog;
     }
 
     private Long parseOptionalId(String value, String fieldName) {

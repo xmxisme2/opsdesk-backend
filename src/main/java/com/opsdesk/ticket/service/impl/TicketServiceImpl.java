@@ -781,7 +781,8 @@ public class TicketServiceImpl implements TicketService {
     }
 
     private TicketCategory loadEnabledCategory(Long categoryId) {
-        TicketCategory category = ticketCategoryMapper.findById(categoryId);
+        // 工单写事务先锁定分类行，保证引用写入前分类不会被并发逻辑删除。
+        TicketCategory category = ticketCategoryMapper.findByIdForUpdate(categoryId);
         if (category == null || category.getEnabled() == null || category.getEnabled() != 1) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "工单分类不存在或未启用");
         }
