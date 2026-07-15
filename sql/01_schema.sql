@@ -153,7 +153,13 @@ CREATE TABLE IF NOT EXISTS ticket_category (
   create_by BIGINT NULL COMMENT '创建人 ID',
   update_by BIGINT NULL COMMENT '更新人 ID',
   deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0 正常，1 删除',
-  UNIQUE KEY uk_ticket_category_name_deleted (parent_id, name, deleted),
+  active_parent_id BIGINT GENERATED ALWAYS AS (
+    CASE WHEN deleted = 0 THEN COALESCE(parent_id, 0) ELSE NULL END
+  ) STORED COMMENT '活动分类父级唯一键，根分类统一映射为 0',
+  active_name VARCHAR(128) GENERATED ALWAYS AS (
+    CASE WHEN deleted = 0 THEN name ELSE NULL END
+  ) STORED COMMENT '活动分类名称唯一键，已删除记录为空以允许重复历史',
+  UNIQUE KEY uk_ticket_category_active_name (active_parent_id, active_name),
   KEY idx_ticket_category_parent (parent_id)
 ) COMMENT='工单分类表';
 

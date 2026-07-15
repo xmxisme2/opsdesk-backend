@@ -14,6 +14,7 @@ import com.opsdesk.ticket.entity.TicketCategory;
 import com.opsdesk.ticket.mapper.TicketCategoryMapper;
 import com.opsdesk.ticket.service.TicketCategoryService;
 import com.opsdesk.ticket.vo.TicketCategoryVO;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -31,8 +32,8 @@ import java.util.stream.Collectors;
 @Service
 public class TicketCategoryServiceImpl implements TicketCategoryService {
 
-    /** 分类审计业务类型：分类配置变更统一归入 TICKET_CATEGORY，不允许外部传入。 */
-    private static final String AUDIT_BIZ_TYPE = "TICKET_CATEGORY";
+    /** 分类审计业务类型：分类属于系统配置，统一归入 SYSTEM_CONFIG，不允许外部传入。 */
+    private static final String AUDIT_BIZ_TYPE = "SYSTEM_CONFIG";
 
     /** 创建分类审计操作类型：管理员新增分类时使用，不允许外部传入。 */
     private static final String AUDIT_OPERATION_CREATE = "TICKET_CATEGORY_CREATE";
@@ -83,7 +84,7 @@ public class TicketCategoryServiceImpl implements TicketCategoryService {
                                    String userAgent) {
         Long parentId = parseOptionalId(request.getParentId(), "父级分类ID");
         if (parentId != null) {
-            loadCategory(parentId, "父级分类不存在");
+            loadCategoryForUpdate(parentId, "父级分类不存在");
         }
         Team defaultTeam = validateDefaultTeam(request.getDefaultTeamId());
         validateDefaultSla(request.getDefaultSlaHours());
@@ -96,10 +97,15 @@ public class TicketCategoryServiceImpl implements TicketCategoryService {
         category.setId(idGenerator.nextId());
         applyMutation(category, request, parentId, defaultTeam, operatorId);
         category.setCreateBy(operatorId);
-        ticketCategoryMapper.insert(category);
+        try {
+            ticketCategoryMapper.insert(category);
+        } catch (DuplicateKeyException exception) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "同级工单分类名称已存在");
+        }
         auditLogService.record(operatorId, AUDIT_OPERATION_CREATE, AUDIT_BIZ_TYPE, category.getId(),
                 "创建工单分类：" + category.getName(), requestIp, userAgent);
-        return ticketConverter.toCategoryVO(category, defaultTeam);
+        TicketCategory persisted = loadCategory(category.getId(), "工单分类创建后读取失败");
+        return ticketConverter.toCategoryVO(persisted, defaultTeam);
     }
 
     @Override
@@ -110,7 +116,7 @@ public class TicketCategoryServiceImpl implements TicketCategoryService {
                                    String requestIp,
                                    String userAgent) {
         Long categoryId = IdParser.parseRequired(id, "工单分类ID");
-        TicketCategory category = loadCategory(categoryId, "工单分类不存在");
+        TicketCategory category = loadCategoryForUpdate(categoryId, "工单分类不存在");
         Long parentId = parseOptionalId(request.getParentId(), "父级分类ID");
         validateParent(categoryId, parentId);
         Team defaultTeam = validateDefaultTeam(request.getDefaultTeamId());
@@ -121,19 +127,24 @@ public class TicketCategoryServiceImpl implements TicketCategoryService {
         }
 
         applyMutation(category, request, parentId, defaultTeam, operatorId);
-        if (ticketCategoryMapper.update(category) == 0) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "工单分类不存在");
+        try {
+            if (ticketCategoryMapper.update(category) == 0) {
+                throw new BusinessException(ErrorCode.NOT_FOUND, "工单分类不存在");
+            }
+        } catch (DuplicateKeyException exception) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "同级工单分类名称已存在");
         }
         auditLogService.record(operatorId, AUDIT_OPERATION_UPDATE, AUDIT_BIZ_TYPE, categoryId,
                 "编辑工单分类：" + category.getName(), requestIp, userAgent);
-        return ticketConverter.toCategoryVO(category, defaultTeam);
+        TicketCategory persisted = loadCategory(categoryId, "工单分类更新后读取失败");
+        return ticketConverter.toCategoryVO(persisted, defaultTeam);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(String id, Long operatorId, String requestIp, String userAgent) {
         Long categoryId = IdParser.parseRequired(id, "工单分类ID");
-        TicketCategory category = loadCategory(categoryId, "工单分类不存在");
+        TicketCategory category = loadCategoryForUpdate(categoryId, "工单分类不存在");
         if (ticketCategoryMapper.countChildren(categoryId) > 0) {
             throw new BusinessException(ErrorCode.STATE_CONFLICT, "存在子分类，不能删除");
         }
@@ -163,10 +174,10 @@ public class TicketCategoryServiceImpl implements TicketCategoryService {
         if (categoryId.equals(parentId)) {
             throw new BusinessException(ErrorCode.STATE_CONFLICT, "父级分类不能选择自身");
         }
+        loadCategoryForUpdate(parentId, "父级分类不存在");
         if (ticketCategoryMapper.countDescendantRelation(categoryId, parentId) > 0) {
             throw new BusinessException(ErrorCode.STATE_CONFLICT, "父级分类不能选择当前分类的子分类");
         }
-        loadCategory(parentId, "父级分类不存在");
     }
 
     private Team validateDefaultTeam(String teamIdValue) {
@@ -206,6 +217,15 @@ public class TicketCategoryServiceImpl implements TicketCategoryService {
 
     private TicketCategory loadCategory(Long categoryId, String message) {
         TicketCategory category = ticketCategoryMapper.findById(categoryId);
+        if (category == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, message);
+        }
+        return category;
+    }
+
+    /** 写路径使用悲观行锁，确保父分类或被删分类在当前事务提交前不会被并发删除。 */
+    private TicketCategory loadCategoryForUpdate(Long categoryId, String message) {
+        TicketCategory category = ticketCategoryMapper.findByIdForUpdate(categoryId);
         if (category == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, message);
         }

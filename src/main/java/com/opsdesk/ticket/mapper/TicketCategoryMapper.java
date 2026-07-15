@@ -16,6 +16,9 @@ public interface TicketCategoryMapper {
 
     TicketCategory findById(@Param("id") Long id);
 
+    /** 在写事务中锁定有效分类，串行化分类删除与子分类/工单引用创建。 */
+    TicketCategory findByIdForUpdate(@Param("id") Long id);
+
     List<TicketCategory> searchTree(@Param("enabled") Integer enabled,
                                     @Param("keyword") String keyword);
 

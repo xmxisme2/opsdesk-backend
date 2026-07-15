@@ -17,6 +17,16 @@
         LIMIT 1
     </select>
 
+    <!-- 写事务统一锁定分类行，删除与新增引用必须遵守同一锁协议。 -->
+    <select id="findByIdForUpdate" resultType="com.opsdesk.ticket.entity.TicketCategory">
+        SELECT <include refid="TicketCategoryColumns"/>
+        FROM ticket_category
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
     <select id="searchTree" resultType="com.opsdesk.ticket.entity.TicketCategory">
         SELECT <include refid="TicketCategoryColumns"/>
         FROM ticket_category
