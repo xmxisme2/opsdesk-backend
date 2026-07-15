@@ -116,9 +116,9 @@ public class TicketCategoryServiceImpl implements TicketCategoryService {
                                    String requestIp,
                                    String userAgent) {
         Long categoryId = IdParser.parseRequired(id, "工单分类ID");
-        TicketCategory category = loadCategoryForUpdate(categoryId, "工单分类不存在");
         Long parentId = parseOptionalId(request.getParentId(), "父级分类ID");
-        validateParent(categoryId, parentId);
+        TicketCategory category = lockCategoryAndParent(categoryId, parentId);
+        validateParentRelation(categoryId, parentId);
         Team defaultTeam = validateDefaultTeam(request.getDefaultTeamId());
         validateDefaultSla(request.getDefaultSlaHours());
         String name = normalizeName(request.getName());
@@ -167,14 +167,30 @@ public class TicketCategoryServiceImpl implements TicketCategoryService {
         return ticketConverter.toCategoryVO(category, defaultTeam, children);
     }
 
-    private void validateParent(Long categoryId, Long parentId) {
+    private TicketCategory lockCategoryAndParent(Long categoryId, Long parentId) {
         if (parentId == null) {
-            return;
+            return loadCategoryForUpdate(categoryId, "工单分类不存在");
         }
         if (categoryId.equals(parentId)) {
             throw new BusinessException(ErrorCode.STATE_CONFLICT, "父级分类不能选择自身");
         }
-        loadCategoryForUpdate(parentId, "父级分类不存在");
+        List<Long> lockIds = List.of(categoryId, parentId).stream().sorted().toList();
+        Map<Long, TicketCategory> lockedCategories = ticketCategoryMapper.findByIdsForUpdate(lockIds).stream()
+                .collect(Collectors.toMap(TicketCategory::getId, category -> category));
+        TicketCategory category = lockedCategories.get(categoryId);
+        if (category == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "工单分类不存在");
+        }
+        if (!lockedCategories.containsKey(parentId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "父级分类不存在");
+        }
+        return category;
+    }
+
+    private void validateParentRelation(Long categoryId, Long parentId) {
+        if (parentId == null) {
+            return;
+        }
         if (ticketCategoryMapper.countDescendantRelation(categoryId, parentId) > 0) {
             throw new BusinessException(ErrorCode.STATE_CONFLICT, "父级分类不能选择当前分类的子分类");
         }

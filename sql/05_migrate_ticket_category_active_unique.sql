@@ -5,21 +5,6 @@
 SET NAMES utf8mb4;
 USE opsdesk;
 
-SET @old_index_count = (
-  SELECT COUNT(1) FROM information_schema.STATISTICS
-  WHERE TABLE_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'ticket_category'
-    AND INDEX_NAME = 'uk_ticket_category_name_deleted'
-);
-SET @drop_old_index_sql = IF(
-  @old_index_count > 0,
-  'ALTER TABLE ticket_category DROP INDEX uk_ticket_category_name_deleted',
-  'SELECT 1'
-);
-PREPARE drop_old_index_statement FROM @drop_old_index_sql;
-EXECUTE drop_old_index_statement;
-DEALLOCATE PREPARE drop_old_index_statement;
-
 SET @active_parent_column_count = (
   SELECT COUNT(1) FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE()
@@ -64,3 +49,19 @@ SET @add_active_unique_index_sql = IF(
 PREPARE add_active_unique_index_statement FROM @add_active_unique_index_sql;
 EXECUTE add_active_unique_index_statement;
 DEALLOCATE PREPARE add_active_unique_index_statement;
+
+-- 新索引成功存在后才移除旧索引，避免 DDL 隐式提交后出现无唯一约束窗口。
+SET @old_index_count = (
+  SELECT COUNT(1) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'ticket_category'
+    AND INDEX_NAME = 'uk_ticket_category_name_deleted'
+);
+SET @drop_old_index_sql = IF(
+  @old_index_count > 0,
+  'ALTER TABLE ticket_category DROP INDEX uk_ticket_category_name_deleted',
+  'SELECT 1'
+);
+PREPARE drop_old_index_statement FROM @drop_old_index_sql;
+EXECUTE drop_old_index_statement;
+DEALLOCATE PREPARE drop_old_index_statement;

@@ -72,8 +72,8 @@ class TicketCategoryServiceImplTest {
 
     @Test
     void updateShouldRejectDescendantAsParent() {
-        when(ticketCategoryMapper.findByIdForUpdate(2L)).thenReturn(category(2L, 1L, "系统故障"));
-        when(ticketCategoryMapper.findByIdForUpdate(3L)).thenReturn(category(3L, 2L, "应用故障"));
+        when(ticketCategoryMapper.findByIdsForUpdate(java.util.List.of(2L, 3L))).thenReturn(java.util.List.of(
+                category(2L, 1L, "系统故障"), category(3L, 2L, "应用故障")));
         when(ticketCategoryMapper.countDescendantRelation(2L, 3L)).thenReturn(1);
         TicketCategoryMutationRequest request = mutationRequest("系统故障");
         request.setParentId("3");
@@ -86,7 +86,6 @@ class TicketCategoryServiceImplTest {
 
     @Test
     void updateShouldRejectSelfAsParent() {
-        when(ticketCategoryMapper.findByIdForUpdate(2L)).thenReturn(category(2L, 1L, "系统故障"));
         TicketCategoryMutationRequest request = mutationRequest("系统故障");
         request.setParentId("2");
 
@@ -162,6 +161,20 @@ class TicketCategoryServiceImplTest {
         assertThat(result.updatedAt()).isEqualTo("2026-07-15 10:30:00");
         verify(auditLogService).record(9L, "TICKET_CATEGORY_UPDATE", "SYSTEM_CONFIG", 2L,
                 "编辑工单分类：应用故障", "127.0.0.1", "JUnit");
+    }
+
+    @Test
+    void updateShouldLockCurrentAndParentInAscendingIdOrder() {
+        when(ticketCategoryMapper.findByIdsForUpdate(java.util.List.of(2L, 5L))).thenReturn(java.util.List.of(
+                category(2L, null, "目标父分类"), category(5L, null, "待移动分类")));
+        when(ticketCategoryMapper.update(any())).thenReturn(1);
+        when(ticketCategoryMapper.findById(5L)).thenReturn(category(5L, 2L, "待移动分类"));
+        TicketCategoryMutationRequest request = mutationRequest("待移动分类");
+        request.setParentId("2");
+
+        ticketCategoryService.update("5", request, 9L, "127.0.0.1", "JUnit");
+
+        verify(ticketCategoryMapper).findByIdsForUpdate(java.util.List.of(2L, 5L));
     }
 
     @Test

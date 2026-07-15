@@ -19,6 +19,9 @@ public interface TicketCategoryMapper {
     /** 在写事务中锁定有效分类，串行化分类删除与子分类/工单引用创建。 */
     TicketCategory findByIdForUpdate(@Param("id") Long id);
 
+    /** 按主键升序批量锁定分类，避免分类移动时因锁顺序相反产生死锁。 */
+    List<TicketCategory> findByIdsForUpdate(@Param("ids") List<Long> ids);
+
     List<TicketCategory> searchTree(@Param("enabled") Integer enabled,
                                     @Param("keyword") String keyword);
 

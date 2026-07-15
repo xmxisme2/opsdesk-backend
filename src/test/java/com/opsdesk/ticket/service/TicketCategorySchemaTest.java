@@ -22,6 +22,15 @@ class TicketCategorySchemaTest {
                 .doesNotContain("uk_ticket_category_name_deleted");
         assertThat(migration).contains("uk_ticket_category_active_name")
                 .contains("COALESCE(parent_id, 0)")
-                .contains("CASE WHEN deleted = 0 THEN name ELSE NULL END");
+                .contains("CASE WHEN deleted = 0 THEN name ELSE NULL END")
+                .contains("information_schema.COLUMNS")
+                .contains("information_schema.STATISTICS");
+
+        int createNewIndex = migration.indexOf(
+                "ALTER TABLE ticket_category ADD UNIQUE INDEX uk_ticket_category_active_name");
+        int dropOldIndex = migration.indexOf(
+                "ALTER TABLE ticket_category DROP INDEX uk_ticket_category_name_deleted");
+        assertThat(createNewIndex).isGreaterThanOrEqualTo(0);
+        assertThat(dropOldIndex).isGreaterThan(createNewIndex);
     }
 }

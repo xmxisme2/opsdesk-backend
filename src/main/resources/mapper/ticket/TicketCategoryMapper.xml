@@ -27,6 +27,19 @@
         FOR UPDATE
     </select>
 
+    <!-- 分类移动一次性按主键升序加锁，保证所有事务使用相同锁顺序。 -->
+    <select id="findByIdsForUpdate" resultType="com.opsdesk.ticket.entity.TicketCategory">
+        SELECT <include refid="TicketCategoryColumns"/>
+        FROM ticket_category
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND deleted = 0
+        ORDER BY id ASC
+        FOR UPDATE
+    </select>
+
     <select id="searchTree" resultType="com.opsdesk.ticket.entity.TicketCategory">
         SELECT <include refid="TicketCategoryColumns"/>
         FROM ticket_category
