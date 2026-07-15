@@ -124,6 +124,11 @@ public class TicketConverter {
         );
     }
 
+    /** 分类写接口返回单节点时使用，统一保证 children 返回空数组而不是 null。 */
+    public TicketCategoryVO toCategoryVO(TicketCategory category, Team defaultTeam) {
+        return toCategoryVO(category, defaultTeam, List.of());
+    }
+
     public TicketOperationLogVO toOperationLogVO(TicketOperationLog log, SysUser operator) {
         return new TicketOperationLogVO(
                 String.valueOf(log.getId()),
