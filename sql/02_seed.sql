@@ -288,7 +288,11 @@ VALUES
   (4, 'upload.max_files_per_ticket', '10', 'UPLOAD', '单工单最大附件数量', 1, 0, NULL, NULL),
   (5, 'upload.allowed_extensions', 'jpg,jpeg,png,pdf,docx,xlsx,txt,log,zip', 'UPLOAD', '允许上传的扩展名', 1, 0, NULL, NULL),
   (6, 'upload.previewable_extensions', 'jpg,jpeg,png,txt,log', 'UPLOAD', '允许安全预览的扩展名', 1, 0, NULL, NULL),
-  (7, 'upload.download_only_extensions', 'pdf,docx,xlsx,zip', 'UPLOAD', '仅允许下载的扩展名', 1, 0, NULL, NULL)
+  (7, 'upload.download_only_extensions', 'pdf,docx,xlsx,zip', 'UPLOAD', '仅允许下载的扩展名', 1, 0, NULL, NULL),
+  (8, 'priority.LOW', '{"name":"低","sort":10,"color":"#0D8052","enabled":true}', 'PRIORITY', '低优先级展示配置', 1, 0, NULL, NULL),
+  (9, 'priority.MEDIUM', '{"name":"中","sort":20,"color":"#1252AD","enabled":true}', 'PRIORITY', '中优先级展示配置，系统默认优先级必须启用', 1, 0, NULL, NULL),
+  (10, 'priority.HIGH', '{"name":"高","sort":30,"color":"#BA630F","enabled":true}', 'PRIORITY', '高优先级展示配置', 1, 0, NULL, NULL),
+  (11, 'priority.URGENT', '{"name":"紧急","sort":40,"color":"#C71F24","enabled":true}', 'PRIORITY', '紧急优先级展示配置', 1, 0, NULL, NULL)
 ON DUPLICATE KEY UPDATE
   config_value = VALUES(config_value),
   description = VALUES(description),
