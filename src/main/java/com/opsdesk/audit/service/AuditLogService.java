@@ -21,4 +21,17 @@ public interface AuditLogService {
                 String content,
                 String requestIp,
                 String userAgent);
+
+    /**
+     * 严格记录关键审计日志，写库失败时直接传播异常，由调用方事务统一回滚。
+     *
+     * <p>仅用于“业务变更与审计必须同时成功”的关键配置等场景；普通调用继续使用尽力记录的 {@link #record}。</p>
+     */
+    void recordStrict(Long operatorId,
+                      String operationType,
+                      String bizType,
+                      Long bizId,
+                      String content,
+                      String requestIp,
+                      String userAgent);
 }

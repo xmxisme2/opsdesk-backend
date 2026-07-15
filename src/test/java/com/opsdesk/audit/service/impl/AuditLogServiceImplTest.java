@@ -73,4 +73,43 @@ class AuditLogServiceImplTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("开始时间不能晚于结束时间");
     }
+
+    @Test
+    void recordStrictShouldPropagateMapperFailure() {
+        AuditLogMapper mapper = mock(AuditLogMapper.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        when(idGenerator.nextId()).thenReturn(100L);
+        when(mapper.insert(any(AuditLog.class))).thenThrow(new IllegalStateException("database unavailable"));
+        AuditLogServiceImpl service = new AuditLogServiceImpl(mapper, idGenerator);
+
+        assertThatThrownBy(() -> service.recordStrict(1L, "UPDATE", "SYSTEM_CONFIG", null,
+                "更新配置", "127.0.0.1", "JUnit"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("database unavailable");
+    }
+
+    @Test
+    void recordStrictShouldRejectUnexpectedAffectedRows() {
+        AuditLogMapper mapper = mock(AuditLogMapper.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        when(idGenerator.nextId()).thenReturn(100L);
+        when(mapper.insert(any(AuditLog.class))).thenReturn(0);
+        AuditLogServiceImpl service = new AuditLogServiceImpl(mapper, idGenerator);
+
+        assertThatThrownBy(() -> service.recordStrict(1L, "UPDATE", "SYSTEM_CONFIG", null,
+                "更新配置", "127.0.0.1", "JUnit"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("审计日志写入失败");
+    }
+
+    @Test
+    void recordShouldKeepBestEffortSemanticsWhenMapperFails() {
+        AuditLogMapper mapper = mock(AuditLogMapper.class);
+        when(mapper.insert(any(AuditLog.class))).thenThrow(new IllegalStateException("database unavailable"));
+        AuditLogServiceImpl service = new AuditLogServiceImpl(mapper, mock(SnowflakeIdGenerator.class));
+
+        service.record(1L, "LOGIN", "USER", 1L, "登录", "127.0.0.1", "JUnit");
+
+        verify(mapper).insert(any(AuditLog.class));
+    }
 }

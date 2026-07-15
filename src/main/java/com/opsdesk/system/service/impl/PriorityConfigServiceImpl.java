@@ -77,7 +77,7 @@ public class PriorityConfigServiceImpl implements PriorityConfigService {
         for (PriorityOptionVO option : normalized) {
             updateRequired(CONFIG_KEY_PREFIX + option.code(), serialize(option), operatorId);
         }
-        auditLogService.record(operatorId, "UPDATE", AUDIT_BIZ_TYPE, null,
+        auditLogService.recordStrict(operatorId, "UPDATE", AUDIT_BIZ_TYPE, null,
                 "更新工单优先级配置", requestIp, userAgent);
         return normalized.stream().sorted(Comparator.comparing(PriorityOptionVO::sort)).toList();
     }

@@ -109,7 +109,23 @@ class PriorityConfigServiceImplTest {
 
         assertThat(result.get(0).color()).isEqualTo("#ABCDEF");
         verify(mapper, times(4)).updateValue(startsWith("priority."), anyString(), eq(9L));
-        verify(auditLogService, times(1)).record(9L, "UPDATE", "SYSTEM_CONFIG", null,
+        verify(auditLogService, times(1)).recordStrict(9L, "UPDATE", "SYSTEM_CONFIG", null,
+                "更新工单优先级配置", "127.0.0.1", "JUnit");
+        verify(auditLogService, never()).record(anyLong(), anyString(), anyString(), any(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void updateShouldPropagateStrictAuditFailureForTransactionRollback() {
+        when(mapper.updateValue(anyString(), anyString(), eq(9L))).thenReturn(1);
+        doThrow(new IllegalStateException("audit insert failed")).when(auditLogService)
+                .recordStrict(anyLong(), anyString(), anyString(), any(), anyString(), anyString(), anyString());
+
+        assertThatThrownBy(() -> service.update(new PriorityConfigUpdateRequest(defaultItems()),
+                9L, "127.0.0.1", "JUnit"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("audit insert failed");
+        verify(mapper, times(4)).updateValue(startsWith("priority."), anyString(), eq(9L));
+        verify(auditLogService, times(1)).recordStrict(9L, "UPDATE", "SYSTEM_CONFIG", null,
                 "更新工单优先级配置", "127.0.0.1", "JUnit");
     }
 
