@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.knowledge.mapper.KnowledgeCategoryMapper">
+    <sql id="Columns">id, parent_id, name, sort, enabled, create_by, update_by</sql>
+    <select id="searchTree" resultType="com.opsdesk.knowledge.entity.KnowledgeCategory">
+        SELECT <include refid="Columns"/> FROM knowledge_category WHERE deleted=0
+        <if test="enabled != null">AND enabled=#{enabled}</if>
+        ORDER BY sort ASC, id ASC
+    </select>
+    <select id="findById" resultType="com.opsdesk.knowledge.entity.KnowledgeCategory">SELECT <include refid="Columns"/> FROM knowledge_category WHERE id=#{id} AND deleted=0 LIMIT 1</select>
+    <select id="countByParentAndName" resultType="int">
+        SELECT COUNT(1) FROM knowledge_category WHERE deleted=0 AND name=#{name}
+        <choose><when test="parentId == null">AND parent_id IS NULL</when><otherwise>AND parent_id=#{parentId}</otherwise></choose>
+        <if test="excludeId != null">AND id&lt;&gt;#{excludeId}</if>
+    </select>
+    <select id="countChildren" resultType="int">SELECT COUNT(1) FROM knowledge_category WHERE parent_id=#{id} AND deleted=0</select>
+    <insert id="insert">INSERT INTO knowledge_category (id,parent_id,name,sort,enabled,create_by,update_by,deleted) VALUES (#{id},#{parentId},#{name},#{sort},#{enabled},#{createBy},#{updateBy},0)</insert>
+    <update id="update">UPDATE knowledge_category SET parent_id=#{parentId},name=#{name},sort=#{sort},enabled=#{enabled},update_by=#{updateBy},update_time=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted=0</update>
+    <update id="logicalDelete">UPDATE knowledge_category SET deleted=1,update_by=#{operatorId},update_time=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted=0</update>
+</mapper>

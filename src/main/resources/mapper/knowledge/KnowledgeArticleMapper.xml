@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.knowledge.mapper.KnowledgeArticleMapper">
+    <sql id="ArticleSelect">
+        a.id, a.title, a.summary, a.content, a.category_id, a.source_ticket_id, a.status,
+        a.author_id, a.view_count, a.published_time, a.create_time, a.update_time,
+        a.create_by, a.update_by, a.deleted, c.name AS category_name,
+        u.username AS author_name, t.ticket_no AS source_ticket_no,
+        GROUP_CONCAT(DISTINCT kt.name ORDER BY kt.name SEPARATOR ',') AS tag_names
+    </sql>
+
+    <select id="findById" resultType="com.opsdesk.knowledge.mapper.KnowledgeArticleRow">
+        SELECT <include refid="ArticleSelect"/>
+        FROM knowledge_article a
+        LEFT JOIN knowledge_category c ON c.id = a.category_id AND c.deleted = 0
+        LEFT JOIN sys_user u ON u.id = a.author_id AND u.deleted = 0
+        LEFT JOIN ticket t ON t.id = a.source_ticket_id AND t.deleted = 0
+        LEFT JOIN knowledge_article_tag kat ON kat.article_id = a.id AND kat.deleted = 0
+        LEFT JOIN knowledge_tag kt ON kt.id = kat.tag_id AND kt.deleted = 0
+        WHERE a.id = #{id} AND a.deleted = 0
+        GROUP BY a.id, a.title, a.summary, a.content, a.category_id, a.source_ticket_id, a.status,
+                 a.author_id, a.view_count, a.published_time, a.create_time, a.update_time,
+                 a.create_by, a.update_by, a.deleted, c.name, u.username, t.ticket_no
+        LIMIT 1
+    </select>
+
+    <select id="search" resultType="com.opsdesk.knowledge.mapper.KnowledgeArticleRow">
+        SELECT <include refid="ArticleSelect"/>
+        FROM knowledge_article a
+        LEFT JOIN knowledge_category c ON c.id = a.category_id AND c.deleted = 0
+        LEFT JOIN sys_user u ON u.id = a.author_id AND u.deleted = 0
+        LEFT JOIN ticket t ON t.id = a.source_ticket_id AND t.deleted = 0
+        LEFT JOIN knowledge_article_tag kat ON kat.article_id = a.id AND kat.deleted = 0
+        LEFT JOIN knowledge_tag kt ON kt.id = kat.tag_id AND kt.deleted = 0
+        WHERE a.deleted = 0
+        <if test="keyword != null and keyword != ''">
+            AND (a.title LIKE CONCAT('%', #{keyword}, '%') OR a.summary LIKE CONCAT('%', #{keyword}, '%')
+                 OR a.content LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="categoryId != null">AND a.category_id = #{categoryId}</if>
+        <if test="tag != null and tag != ''">AND EXISTS (
+            SELECT 1 FROM knowledge_article_tag kat2
+            INNER JOIN knowledge_tag kt2 ON kt2.id = kat2.tag_id AND kt2.deleted = 0
+            WHERE kat2.article_id = a.id AND kat2.deleted = 0 AND kt2.name = #{tag}
+        )</if>
+        <if test="status != null and status != ''">AND a.status = #{status}</if>
+        <if test="authorId != null">AND a.author_id = #{authorId}</if>
+        GROUP BY a.id, a.title, a.summary, a.content, a.category_id, a.source_ticket_id, a.status,
+                 a.author_id, a.view_count, a.published_time, a.create_time, a.update_time,
+                 a.create_by, a.update_by, a.deleted, c.name, u.username, t.ticket_no
+        <choose>
+            <when test="sortBy == 'viewCount'">ORDER BY a.view_count DESC, a.id DESC</when>
+            <when test="sortBy == 'publishedAt'">ORDER BY a.published_time DESC, a.id DESC</when>
+            <otherwise>ORDER BY a.update_time DESC, a.id DESC</otherwise>
+        </choose>
+    </select>
+
+    <insert id="insert">
+        INSERT INTO knowledge_article (id, title, summary, content, category_id, source_ticket_id,
+          status, author_id, view_count, published_time, create_by, update_by, deleted)
+        VALUES (#{id}, #{title}, #{summary}, #{content}, #{categoryId}, #{sourceTicketId},
+          #{status}, #{authorId}, #{viewCount}, #{publishedTime}, #{createBy}, #{updateBy}, 0)
+    </insert>
+
+    <update id="update">
+        UPDATE knowledge_article SET title=#{title}, summary=#{summary}, content=#{content},
+          category_id=#{categoryId}, source_ticket_id=#{sourceTicketId}, status=#{status},
+          published_time=#{publishedTime}, update_by=#{updateBy}, update_time=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND deleted=0
+    </update>
+
+    <update id="updateStatus">
+        UPDATE knowledge_article SET status=#{status},
+          published_time=<choose><when test="published">COALESCE(published_time, CURRENT_TIMESTAMP)</when><otherwise>published_time</otherwise></choose>,
+          update_by=#{operatorId}, update_time=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted=0
+    </update>
+    <update id="logicalDelete">UPDATE knowledge_article SET deleted=1, update_by=#{operatorId}, update_time=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted=0</update>
+    <update id="incrementViewCount">UPDATE knowledge_article SET view_count=view_count+1 WHERE id=#{id} AND deleted=0 AND status='PUBLISHED'</update>
+    <select id="countByCategoryId" resultType="int">SELECT COUNT(1) FROM knowledge_article WHERE category_id=#{categoryId} AND deleted=0</select>
+    <select id="findTagIds" resultType="long">SELECT tag_id FROM knowledge_article_tag WHERE article_id=#{articleId} AND deleted=0</select>
+    <update id="deleteArticleTags">UPDATE knowledge_article_tag SET deleted=1, update_by=#{operatorId}, update_time=CURRENT_TIMESTAMP WHERE article_id=#{articleId} AND deleted=0</update>
+    <insert id="insertArticleTag">INSERT INTO knowledge_article_tag (id, article_id, tag_id, create_by, update_by, deleted) VALUES (#{id}, #{articleId}, #{tagId}, #{operatorId}, #{operatorId}, 0)</insert>
+</mapper>

@@ -308,7 +308,8 @@ CREATE TABLE IF NOT EXISTS knowledge_category (
   create_by BIGINT NULL COMMENT '创建人 ID',
   update_by BIGINT NULL COMMENT '更新人 ID',
   deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0 正常，1 删除',
-  UNIQUE KEY uk_knowledge_category_name_deleted (parent_id, name, deleted)
+  active_parent_id BIGINT GENERATED ALWAYS AS (CASE WHEN deleted = 0 THEN COALESCE(parent_id, 0) ELSE NULL END) STORED COMMENT '活动分类父级唯一键',
+  UNIQUE KEY uk_knowledge_category_active_name (active_parent_id, name)
 ) COMMENT='知识库分类表';
 
 CREATE TABLE IF NOT EXISTS knowledge_tag (
@@ -320,7 +321,8 @@ CREATE TABLE IF NOT EXISTS knowledge_tag (
   create_by BIGINT NULL COMMENT '创建人 ID',
   update_by BIGINT NULL COMMENT '更新人 ID',
   deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0 正常，1 删除',
-  UNIQUE KEY uk_knowledge_tag_name_deleted (name, deleted)
+  active_name VARCHAR(64) GENERATED ALWAYS AS (CASE WHEN deleted = 0 THEN name ELSE NULL END) STORED COMMENT '活动标签唯一键',
+  UNIQUE KEY uk_knowledge_tag_active_name (active_name)
 ) COMMENT='知识库标签表';
 
 CREATE TABLE IF NOT EXISTS knowledge_article (
@@ -353,7 +355,8 @@ CREATE TABLE IF NOT EXISTS knowledge_article_tag (
   create_by BIGINT NULL COMMENT '创建人 ID',
   update_by BIGINT NULL COMMENT '更新人 ID',
   deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0 正常，1 删除',
-  UNIQUE KEY uk_knowledge_article_tag_deleted (article_id, tag_id, deleted)
+  active_tag_id BIGINT GENERATED ALWAYS AS (CASE WHEN deleted = 0 THEN tag_id ELSE NULL END) STORED COMMENT '活动文章标签唯一键',
+  UNIQUE KEY uk_knowledge_article_tag_active (article_id, active_tag_id)
 ) COMMENT='知识库文章标签关联表';
 
 CREATE TABLE IF NOT EXISTS audit_log (
