@@ -32,6 +32,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.regex.Pattern;
 
 /**
@@ -157,6 +158,60 @@ public class AttachmentServiceImpl implements AttachmentService {
             attachments = attachmentMapper.findByTempToken(bizType, tempToken, operatorId);
         }
         return attachments.stream().map(attachmentConverter::toVO).toList();
+    }
+
+    @Override
+    @Transactional
+    public List<AttachmentVO> bindTemporaryAttachments(String bizType,
+                                                        Long bizId,
+                                                        List<String> attachmentIds,
+                                                        CurrentUser currentUser) {
+        Long operatorId = requireUserId(currentUser);
+        if (attachmentIds == null || attachmentIds.isEmpty()) {
+            return List.of();
+        }
+        String normalizedBizType = resourceAccessService.normalizeBizType(bizType);
+        if (bizId == null || bizId <= 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "业务资源ID必须为正整数");
+        }
+        resourceAccessService.requireWriteAccess(normalizedBizType, bizId, currentUser);
+        List<Long> ids = attachmentIds.stream()
+                .filter(StringUtils::hasText)
+                .map(value -> IdParser.parseRequired(value, "附件ID"))
+                .collect(java.util.stream.Collectors.collectingAndThen(
+                        java.util.stream.Collectors.toCollection(LinkedHashSet::new), List::copyOf));
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        List<Attachment> attachments = attachmentMapper.findTemporaryByIds(normalizedBizType, ids, operatorId);
+        if (attachments.size() != ids.size()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "只能绑定本人尚未关联业务的临时附件");
+        }
+        if (attachmentMapper.bindTemporaryByIds(normalizedBizType, ids, operatorId, bizId, operatorId) != ids.size()) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "附件状态已变化，请刷新后重试");
+        }
+        return attachments.stream().map(attachment -> {
+            attachment.setBizId(bizId);
+            attachment.setTempToken(null);
+            return attachmentConverter.toVO(attachment);
+        }).toList();
+    }
+
+    @Override
+    @Transactional
+    public int logicalDeleteBoundAttachments(String bizType, Long bizId, CurrentUser currentUser) {
+        Long operatorId = requireUserId(currentUser);
+        String normalizedBizType = resourceAccessService.normalizeBizType(bizType);
+        if (bizId == null || bizId <= 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "业务资源ID必须为正整数");
+        }
+        resourceAccessService.requireWriteAccess(normalizedBizType, bizId, currentUser);
+        int affected = attachmentMapper.logicalDeleteByBiz(normalizedBizType, bizId, operatorId);
+        if (affected > 0) {
+            auditLogService.record(operatorId, AUDIT_OPERATION_DELETE, AUDIT_BIZ_TYPE, bizId,
+                    "随业务删除关联附件：" + affected + " 个", null, null);
+        }
+        return affected;
     }
 
     @Override

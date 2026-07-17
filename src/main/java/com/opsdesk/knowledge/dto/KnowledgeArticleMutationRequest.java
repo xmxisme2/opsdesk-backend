@@ -23,6 +23,9 @@ public class KnowledgeArticleMutationRequest {
 
     private String categoryId;
     private List<@Size(max = 64, message = "标签不能超过64个字符") String> tags;
+    /** 待绑定临时附件 ID，只能绑定当前维护者本人上传的 KNOWLEDGE 临时附件。 */
+    @Size(max = 10, message = "每篇文章最多绑定10个附件")
+    private List<String> attachmentIds;
     private String sourceTicketId;
     private String status;
 }

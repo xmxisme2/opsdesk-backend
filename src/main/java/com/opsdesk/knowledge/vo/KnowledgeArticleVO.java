@@ -1,5 +1,6 @@
 package com.opsdesk.knowledge.vo;
 
+import com.opsdesk.attachment.vo.AttachmentVO;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -17,6 +18,8 @@ public class KnowledgeArticleVO {
     private String categoryId;
     private String categoryName;
     private List<String> tags;
+    /** 已绑定附件，具体预览和下载仍由附件接口进行资源范围校验。 */
+    private List<AttachmentVO> attachments;
     private String sourceTicketId;
     private String sourceTicketNo;
     private String status;

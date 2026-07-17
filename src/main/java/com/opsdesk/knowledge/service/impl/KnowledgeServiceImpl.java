@@ -1,6 +1,9 @@
 package com.opsdesk.knowledge.service.impl;
 
 import com.opsdesk.audit.service.AuditLogService;
+import com.opsdesk.attachment.dto.AttachmentSearchRequest;
+import com.opsdesk.attachment.service.AttachmentResourceAccessService;
+import com.opsdesk.attachment.service.AttachmentService;
 import com.opsdesk.comment.entity.TicketComment;
 import com.opsdesk.comment.mapper.TicketCommentMapper;
 import com.opsdesk.common.exception.BusinessException;
@@ -58,11 +61,13 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private final KnowledgeConverter converter;
     private final SnowflakeIdGenerator idGenerator;
     private final AuditLogService auditLogService;
+    private final AttachmentService attachmentService;
 
     public KnowledgeServiceImpl(KnowledgeArticleMapper articleMapper, KnowledgeCategoryMapper categoryMapper,
                                 KnowledgeTagMapper tagMapper, TicketMapper ticketMapper,
                                 TicketCommentMapper commentMapper, KnowledgeConverter converter,
-                                SnowflakeIdGenerator idGenerator, AuditLogService auditLogService) {
+                                SnowflakeIdGenerator idGenerator, AuditLogService auditLogService,
+                                AttachmentService attachmentService) {
         this.articleMapper = articleMapper;
         this.categoryMapper = categoryMapper;
         this.tagMapper = tagMapper;
@@ -71,6 +76,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         this.converter = converter;
         this.idGenerator = idGenerator;
         this.auditLogService = auditLogService;
+        this.attachmentService = attachmentService;
     }
 
     @Override
@@ -97,7 +103,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             articleMapper.incrementViewCount(row.getId());
             row.setViewCount((row.getViewCount() == null ? 0 : row.getViewCount()) + 1);
         }
-        return converter.toArticleVO(row);
+        return toArticleVO(row, user);
     }
 
     @Override
@@ -114,8 +120,10 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         applyArticle(article, request, operatorId, false);
         articleMapper.insert(article);
         replaceTags(article.getId(), request.getTags(), operatorId);
+        attachmentService.bindTemporaryAttachments(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE,
+                article.getId(), request.getAttachmentIds(), user);
         audit(operatorId, "KNOWLEDGE_CREATE", article.getId(), "创建知识库文章：" + article.getTitle(), ip, userAgent);
-        return converter.toArticleVO(requireArticle(article.getId()));
+        return toArticleVO(requireArticle(article.getId()), user);
     }
 
     @Override
@@ -129,8 +137,10 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         applyArticle(current, request, requireUserId(user), STATUS_PUBLISHED.equals(current.getStatus()));
         articleMapper.update(current);
         replaceTags(articleId, request.getTags(), requireUserId(user));
+        attachmentService.bindTemporaryAttachments(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE,
+                articleId, request.getAttachmentIds(), user);
         audit(requireUserId(user), "KNOWLEDGE_UPDATE", articleId, "编辑知识库文章：" + current.getTitle(), ip, userAgent);
-        return converter.toArticleVO(requireArticle(articleId));
+        return toArticleVO(requireArticle(articleId), user);
     }
 
     @Override
@@ -140,6 +150,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         Long articleId = IdParser.parseRequired(id, "知识文章ID");
         KnowledgeArticleRow row = requireArticle(articleId);
         clearTags(articleId, requireUserId(user));
+        attachmentService.logicalDeleteBoundAttachments(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE, articleId, user);
         articleMapper.logicalDelete(articleId, requireUserId(user));
         audit(requireUserId(user), "KNOWLEDGE_DELETE", articleId, "删除知识库文章：" + row.getTitle() + remark(request), ip, userAgent);
     }
@@ -187,11 +198,11 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         requireManager(user);
         Long articleId = IdParser.parseRequired(id, "知识文章ID");
         KnowledgeArticleRow row = requireArticle(articleId);
-        if (status.equals(row.getStatus())) return converter.toArticleVO(row);
+        if (status.equals(row.getStatus())) return toArticleVO(row, user);
         articleMapper.updateStatus(articleId, status, STATUS_PUBLISHED.equals(status), requireUserId(user));
         audit(requireUserId(user), STATUS_PUBLISHED.equals(status) ? "KNOWLEDGE_PUBLISH" : "KNOWLEDGE_OFFLINE",
                 articleId, (STATUS_PUBLISHED.equals(status) ? "发布" : "下线") + "知识库文章：" + row.getTitle() + remark(request), ip, ua);
-        return converter.toArticleVO(requireArticle(articleId));
+        return toArticleVO(requireArticle(articleId), user);
     }
 
     @Override
@@ -253,6 +264,15 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private void ensureCategoryUnique(Long parentId,String name,Long excludeId){if(categoryMapper.countByParentAndName(parentId,name,excludeId)>0)throw new BusinessException(ErrorCode.STATE_CONFLICT,"同级知识分类名称已存在");}
     private KnowledgeCategory requireCategory(Long id){KnowledgeCategory c=categoryMapper.findById(id);if(c==null)throw new BusinessException(ErrorCode.NOT_FOUND,"知识分类不存在");return c;}
     private KnowledgeArticleRow requireArticle(Long id){KnowledgeArticleRow row=articleMapper.findById(id);if(row==null)throw new BusinessException(ErrorCode.NOT_FOUND,"知识文章不存在");return row;}
+    /** 文章详情在基础字段之外补齐附件，读取由附件服务二次校验，避免附件接口被跨资源绕过。 */
+    private KnowledgeArticleVO toArticleVO(KnowledgeArticleRow row, CurrentUser user) {
+        KnowledgeArticleVO vo = converter.toArticleVO(row);
+        AttachmentSearchRequest request = new AttachmentSearchRequest();
+        request.setBizType(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE);
+        request.setBizId(String.valueOf(row.getId()));
+        vo.setAttachments(attachmentService.search(request, user));
+        return vo;
+    }
     private boolean canEdit(KnowledgeArticle article,CurrentUser user){return article.getAuthorId().equals(requireUserId(user))||hasAnyRole(user,ROLE_MANAGER,ROLE_ADMIN);}
     private boolean isMaintainer(CurrentUser user){return hasAnyRole(user,ROLE_AGENT,ROLE_MANAGER,ROLE_ADMIN);}
     private void requireMaintainer(CurrentUser user){if(!isMaintainer(user))throw new BusinessException(ErrorCode.FORBIDDEN,"需要知识库维护权限");}

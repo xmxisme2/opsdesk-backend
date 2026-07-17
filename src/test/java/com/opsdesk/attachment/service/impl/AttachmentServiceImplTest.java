@@ -142,6 +142,41 @@ class AttachmentServiceImplTest {
     }
 
     @Test
+    void bindTemporaryAttachmentsShouldRequireOwnedUnboundKnowledgeFiles() {
+        Attachment attachment = textAttachment();
+        attachment.setBizType("KNOWLEDGE");
+        attachment.setBizId(null);
+        attachment.setTempToken("knowledge_1234567890abcdef");
+        CurrentUser currentUser = user(10L, "AGENT");
+        when(resourceAccessService.normalizeBizType("KNOWLEDGE")).thenReturn("KNOWLEDGE");
+        when(resourceAccessService.requireWriteAccess("KNOWLEDGE", 200L, currentUser))
+                .thenReturn(new AttachmentResourceScope("KNOWLEDGE", 200L, null));
+        when(attachmentMapper.findTemporaryByIds("KNOWLEDGE", List.of(500L), 10L)).thenReturn(List.of(attachment));
+        when(attachmentMapper.bindTemporaryByIds("KNOWLEDGE", List.of(500L), 10L, 200L, 10L)).thenReturn(1);
+
+        var result = attachmentService.bindTemporaryAttachments("KNOWLEDGE", 200L, List.of("500"), currentUser);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).bizId()).isEqualTo("200");
+        assertThat(result.get(0).tempToken()).isNull();
+    }
+
+    @Test
+    void logicalDeleteBoundAttachmentsShouldHideAllFilesBeforeBusinessDeletion() {
+        CurrentUser currentUser = user(10L, "MANAGER");
+        when(resourceAccessService.normalizeBizType("KNOWLEDGE")).thenReturn("KNOWLEDGE");
+        when(resourceAccessService.requireWriteAccess("KNOWLEDGE", 200L, currentUser))
+                .thenReturn(new AttachmentResourceScope("KNOWLEDGE", 200L, null));
+        when(attachmentMapper.logicalDeleteByBiz("KNOWLEDGE", 200L, 10L)).thenReturn(2);
+
+        int affected = attachmentService.logicalDeleteBoundAttachments("KNOWLEDGE", 200L, currentUser);
+
+        assertThat(affected).isEqualTo(2);
+        verify(auditLogService).record(10L, "ATTACHMENT_DELETE", "ATTACHMENT", 200L,
+                "随业务删除关联附件：2 个", null, null);
+    }
+
+    @Test
     void previewShouldEscapeTextContent() {
         Attachment attachment = textAttachment();
         CurrentUser currentUser = user(10L, "USER");

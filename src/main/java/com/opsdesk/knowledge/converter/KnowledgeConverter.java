@@ -22,6 +22,7 @@ public class KnowledgeConverter {
         vo.setCategoryId(row.getCategoryId() == null ? null : String.valueOf(row.getCategoryId()));
         vo.setCategoryName(row.getCategoryName());
         vo.setTags(StringUtils.hasText(row.getTagNames()) ? Arrays.stream(row.getTagNames().split(",")).toList() : List.of());
+        vo.setAttachments(List.of());
         vo.setSourceTicketId(row.getSourceTicketId() == null ? null : String.valueOf(row.getSourceTicketId()));
         vo.setSourceTicketNo(row.getSourceTicketNo());
         vo.setStatus(row.getStatus());

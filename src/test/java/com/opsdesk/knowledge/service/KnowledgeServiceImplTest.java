@@ -1,6 +1,7 @@
 package com.opsdesk.knowledge.service;
 
 import com.opsdesk.audit.service.AuditLogService;
+import com.opsdesk.attachment.service.AttachmentService;
 import com.opsdesk.comment.mapper.TicketCommentMapper;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
@@ -30,14 +31,16 @@ import static org.mockito.Mockito.*;
 class KnowledgeServiceImplTest {
     private KnowledgeArticleMapper articleMapper;
     private TicketMapper ticketMapper;
+    private AttachmentService attachmentService;
     private KnowledgeService service;
 
     @BeforeEach
     void setUp() {
         articleMapper = mock(KnowledgeArticleMapper.class);
         ticketMapper = mock(TicketMapper.class);
+        attachmentService = mock(AttachmentService.class);
         service = new KnowledgeServiceImpl(articleMapper, mock(KnowledgeCategoryMapper.class), mock(KnowledgeTagMapper.class),
-                ticketMapper, mock(TicketCommentMapper.class), new KnowledgeConverter(), mock(SnowflakeIdGenerator.class), mock(AuditLogService.class));
+                ticketMapper, mock(TicketCommentMapper.class), new KnowledgeConverter(), mock(SnowflakeIdGenerator.class), mock(AuditLogService.class), attachmentService);
     }
 
     @Test
@@ -64,6 +67,7 @@ class KnowledgeServiceImplTest {
         when(articleMapper.findById(2L)).thenReturn(row);
         assertEquals(6, service.detail("2", user("USER")).getViewCount());
         verify(articleMapper).incrementViewCount(2L);
+        verify(attachmentService).search(any(), any());
     }
 
     @Test
