@@ -7,6 +7,7 @@ package com.opsdesk.auth.vo;
  */
 public record SmsCodeSendVO(
         boolean enabled,
-        String message
+        String message,
+        int cooldownSeconds
 ) {
 }

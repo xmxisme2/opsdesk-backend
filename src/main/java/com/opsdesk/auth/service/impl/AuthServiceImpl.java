@@ -12,6 +12,7 @@ import com.opsdesk.auth.service.AuthService;
 import com.opsdesk.auth.service.CaptchaService;
 import com.opsdesk.auth.service.TokenService;
 import com.opsdesk.auth.service.SmsVerificationService;
+import com.opsdesk.auth.service.SmsCooldownService;
 import com.opsdesk.auth.vo.KickoutOthersVO;
 import com.opsdesk.auth.vo.LoginResultVO;
 import com.opsdesk.auth.vo.SmsCodeSendVO;
@@ -27,6 +28,7 @@ import com.opsdesk.user.mapper.SysUserMapper;
 import com.opsdesk.user.mapper.UserRoleMapper;
 import com.opsdesk.user.service.UserContextService;
 import com.opsdesk.user.vo.UserVO;
+import com.opsdesk.config.SmsProperties;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -61,6 +63,8 @@ public class AuthServiceImpl implements AuthService {
     private final SnowflakeIdGenerator idGenerator;
     private final AuditLogService auditLogService;
     private final SmsVerificationService smsVerificationService;
+    private final SmsCooldownService smsCooldownService;
+    private final SmsProperties smsProperties;
 
     public AuthServiceImpl(SysUserMapper sysUserMapper,
                            UserRoleMapper userRoleMapper,
@@ -72,7 +76,9 @@ public class AuthServiceImpl implements AuthService {
                            PasswordEncoder passwordEncoder,
                            SnowflakeIdGenerator idGenerator,
                            AuditLogService auditLogService,
-                           SmsVerificationService smsVerificationService) {
+                           SmsVerificationService smsVerificationService,
+                           SmsCooldownService smsCooldownService,
+                           SmsProperties smsProperties) {
         this.sysUserMapper = sysUserMapper;
         this.userRoleMapper = userRoleMapper;
         this.departmentMapper = departmentMapper;
@@ -84,6 +90,8 @@ public class AuthServiceImpl implements AuthService {
         this.idGenerator = idGenerator;
         this.auditLogService = auditLogService;
         this.smsVerificationService = smsVerificationService;
+        this.smsCooldownService = smsCooldownService;
+        this.smsProperties = smsProperties;
     }
 
     @Override
@@ -212,8 +220,15 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public SmsCodeSendVO sendSmsCode(SmsCodeSendRequest request) {
-        smsVerificationService.send(request.getPhone(), request.getScene());
-        return new SmsCodeSendVO(true, "验证码已发送，请注意查收");
+        int cooldownSeconds = smsProperties.getAliyunDypnsapi().getInterval();
+        smsCooldownService.acquire(request.getPhone(), request.getScene(), cooldownSeconds);
+        try {
+            smsVerificationService.send(request.getPhone(), request.getScene());
+            return new SmsCodeSendVO(true, "验证码已发送，请注意查收", cooldownSeconds);
+        } catch (RuntimeException exception) {
+            smsCooldownService.release(request.getPhone(), request.getScene());
+            throw exception;
+        }
     }
 
     private void validateOptionalCaptcha(String captchaId, String captchaCode) {
