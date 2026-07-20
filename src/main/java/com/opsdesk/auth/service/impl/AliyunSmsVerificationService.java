@@ -3,6 +3,8 @@ package com.opsdesk.auth.service.impl;
 import com.aliyun.dypnsapi20170525.Client;
 import com.aliyun.dypnsapi20170525.models.SendSmsVerifyCodeRequest;
 import com.aliyun.dypnsapi20170525.models.SendSmsVerifyCodeResponse;
+import com.aliyun.dypnsapi20170525.models.CheckSmsVerifyCodeRequest;
+import com.aliyun.dypnsapi20170525.models.CheckSmsVerifyCodeResponse;
 import com.aliyun.teaopenapi.models.Config;
 import com.opsdesk.auth.service.SmsVerificationService;
 import com.opsdesk.common.exception.BusinessException;
@@ -33,11 +35,7 @@ public class AliyunSmsVerificationService implements SmsVerificationService {
         SmsProperties.AliyunDypnsapiProperties config = smsProperties.getAliyunDypnsapi();
         validateConfig(config);
         try {
-            Client client = new Client(new Config()
-                    .setAccessKeyId(config.getAccessKeyId())
-                    .setAccessKeySecret(config.getAccessKeySecret())
-                    .setRegionId(config.getRegionId())
-                    .setEndpoint(config.getEndpoint()));
+            Client client = createClient(config);
             SendSmsVerifyCodeRequest request = new SendSmsVerifyCodeRequest()
                     .setPhoneNumber(phone)
                     .setSignName(config.getSignName())
@@ -62,6 +60,38 @@ public class AliyunSmsVerificationService implements SmsVerificationService {
         } catch (Exception exception) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "短信服务调用失败");
         }
+    }
+
+    @Override
+    public void verify(String phone, String code, String scene) {
+        if (!smsProperties.isEnabled()) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "短信验证码能力未启用");
+        }
+        SmsProperties.AliyunDypnsapiProperties config = smsProperties.getAliyunDypnsapi();
+        validateConfig(config);
+        try {
+            CheckSmsVerifyCodeResponse response = createClient(config).checkSmsVerifyCode(new CheckSmsVerifyCodeRequest()
+                    .setPhoneNumber(phone)
+                    .setVerifyCode(code)
+                    .setCountryCode(config.getCountryCode())
+                    .setOutId("opsdesk-" + scene));
+            if (response.getBody() == null || !Boolean.TRUE.equals(response.getBody().getSuccess())) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "短信验证码错误或已过期");
+            }
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "短信验证码校验失败");
+        }
+    }
+
+    /** 每次调用按当前配置创建客户端，便于本地配置变更后重启生效且不缓存密钥。 */
+    private Client createClient(SmsProperties.AliyunDypnsapiProperties config) throws Exception {
+        return new Client(new Config()
+                .setAccessKeyId(config.getAccessKeyId())
+                .setAccessKeySecret(config.getAccessKeySecret())
+                .setRegionId(config.getRegionId())
+                .setEndpoint(config.getEndpoint()));
     }
 
     /** 外部配置缺失时在调用前失败，避免 SDK 抛出包含敏感上下文的异常。 */

@@ -5,4 +5,7 @@ public interface SmsVerificationService {
 
     /** 向指定手机号发送由阿里云动态生成的验证码。 */
     void send(String phone, String scene);
+
+    /** 校验指定场景的验证码；校验失败时抛出统一业务异常。 */
+    void verify(String phone, String code, String scene);
 }

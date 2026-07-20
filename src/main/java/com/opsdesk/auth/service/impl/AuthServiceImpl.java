@@ -89,7 +89,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public UserVO register(RegisterRequest request, String requestIp, String userAgent) {
-        validateOptionalCaptcha(request.getCaptchaId(), request.getCaptchaCode());
+        validateSmsCode(request.getPhone(), request.getSmsCode(), "register");
         Long departmentId = parseId(request.getDepartmentId(), "部门 ID 格式错误");
         Department department = departmentMapper.findEnabledById(departmentId);
         if (department == null) {
@@ -133,14 +133,22 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResultVO login(LoginRequest request, String requestIp, String userAgent) {
-        if (!"IMAGE".equalsIgnoreCase(request.getCaptchaType())) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "首版仅支持图形验证码登录");
-        }
-        captchaService.validate(request.getCaptchaId(), request.getCaptchaCode());
-
         SysUser user = sysUserMapper.findByPhone(request.getPhone());
-        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "手机号或密码错误");
+        if ("SMS".equalsIgnoreCase(request.getCaptchaType())) {
+            validateSmsCode(request.getPhone(), request.getCaptchaCode(), "login");
+            if (user == null) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "该手机号尚未注册");
+            }
+        } else if ("IMAGE".equalsIgnoreCase(request.getCaptchaType())) {
+            if (!StringUtils.hasText(request.getPassword()) || !StringUtils.hasText(request.getCaptchaId()) || !StringUtils.hasText(request.getCaptchaCode())) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "请输入密码和图形验证码");
+            }
+            captchaService.validate(request.getCaptchaId(), request.getCaptchaCode());
+            if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "手机号或密码错误");
+            }
+        } else {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "不支持的登录验证码类型");
         }
         if (!STATUS_ACTIVE.equals(user.getStatus())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "账号已停用或锁定");
@@ -212,6 +220,14 @@ public class AuthServiceImpl implements AuthService {
         if (StringUtils.hasText(captchaId) || StringUtils.hasText(captchaCode)) {
             captchaService.validate(captchaId, captchaCode);
         }
+    }
+
+    /** 注册与短信登录均通过阿里云校验，验证码明文不在本地存储或日志中出现。 */
+    private void validateSmsCode(String phone, String code, String scene) {
+        if (!StringUtils.hasText(code)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "请输入短信验证码");
+        }
+        smsVerificationService.verify(phone, code, scene);
     }
 
     private LoginResultVO toLoginResult(TokenPair tokenPair, UserVO userVO) {

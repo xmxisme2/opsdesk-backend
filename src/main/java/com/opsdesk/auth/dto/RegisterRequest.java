@@ -28,6 +28,7 @@ public class RegisterRequest {
     private String email;
     private String captchaId;
     private String captchaCode;
+    private String smsCode;
 
     public String getPhone() {
         return phone;
@@ -100,4 +101,7 @@ public class RegisterRequest {
     public void setCaptchaCode(String captchaCode) {
         this.captchaCode = captchaCode;
     }
+
+    public String getSmsCode() { return smsCode; }
+    public void setSmsCode(String smsCode) { this.smsCode = smsCode; }
 }

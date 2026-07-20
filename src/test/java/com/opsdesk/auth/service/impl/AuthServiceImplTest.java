@@ -82,6 +82,7 @@ class AuthServiceImplTest {
         request.setPhone("13900000000");
         request.setDepartmentId("1");
         request.setPassword("password123");
+        request.setSmsCode("123456");
 
         Department department = new Department();
         department.setId(1L);
