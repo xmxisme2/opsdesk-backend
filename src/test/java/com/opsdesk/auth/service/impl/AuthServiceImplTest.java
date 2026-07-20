@@ -4,6 +4,7 @@ import com.opsdesk.audit.service.AuditLogService;
 import com.opsdesk.auth.dto.RegisterRequest;
 import com.opsdesk.auth.service.CaptchaService;
 import com.opsdesk.auth.service.TokenService;
+import com.opsdesk.auth.service.SmsVerificationService;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
@@ -53,6 +54,9 @@ class AuthServiceImplTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private SmsVerificationService smsVerificationService;
+
     private AuthServiceImpl authService;
 
     @BeforeEach
@@ -67,7 +71,8 @@ class AuthServiceImplTest {
                 tokenService,
                 new BCryptPasswordEncoder(),
                 new SnowflakeIdGenerator(),
-                auditLogService
+                auditLogService,
+                smsVerificationService
         );
     }
 

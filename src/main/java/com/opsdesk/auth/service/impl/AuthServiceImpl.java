@@ -11,6 +11,7 @@ import com.opsdesk.auth.model.TokenPair;
 import com.opsdesk.auth.service.AuthService;
 import com.opsdesk.auth.service.CaptchaService;
 import com.opsdesk.auth.service.TokenService;
+import com.opsdesk.auth.service.SmsVerificationService;
 import com.opsdesk.auth.vo.KickoutOthersVO;
 import com.opsdesk.auth.vo.LoginResultVO;
 import com.opsdesk.auth.vo.SmsCodeSendVO;
@@ -59,6 +60,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final SnowflakeIdGenerator idGenerator;
     private final AuditLogService auditLogService;
+    private final SmsVerificationService smsVerificationService;
 
     public AuthServiceImpl(SysUserMapper sysUserMapper,
                            UserRoleMapper userRoleMapper,
@@ -69,7 +71,8 @@ public class AuthServiceImpl implements AuthService {
                            TokenService tokenService,
                            PasswordEncoder passwordEncoder,
                            SnowflakeIdGenerator idGenerator,
-                           AuditLogService auditLogService) {
+                           AuditLogService auditLogService,
+                           SmsVerificationService smsVerificationService) {
         this.sysUserMapper = sysUserMapper;
         this.userRoleMapper = userRoleMapper;
         this.departmentMapper = departmentMapper;
@@ -80,6 +83,7 @@ public class AuthServiceImpl implements AuthService {
         this.passwordEncoder = passwordEncoder;
         this.idGenerator = idGenerator;
         this.auditLogService = auditLogService;
+        this.smsVerificationService = smsVerificationService;
     }
 
     @Override
@@ -200,7 +204,8 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public SmsCodeSendVO sendSmsCode(SmsCodeSendRequest request) {
-        return new SmsCodeSendVO(false, "短信验证码能力暂未启用，请使用手机号密码和图形验证码登录");
+        smsVerificationService.send(request.getPhone(), request.getScene());
+        return new SmsCodeSendVO(true, "验证码已发送，请注意查收");
     }
 
     private void validateOptionalCaptcha(String captchaId, String captchaCode) {
