@@ -35,6 +35,9 @@ public class AuditLogServiceImpl implements AuditLogService {
     /** 审计日志服务记录器：审计写库失败时只写应用日志，不阻断主业务流程。 */
     private static final Logger LOGGER = LoggerFactory.getLogger(AuditLogServiceImpl.class);
 
+    /** 审计文件记录器：仅输出操作元数据，不输出正文、令牌等潜在敏感内容。 */
+    private static final Logger AUDIT_LOGGER = LoggerFactory.getLogger("AUDIT");
+
     private final AuditLogMapper auditLogMapper;
     private final SnowflakeIdGenerator idGenerator;
     private final AuditLogConverter auditLogConverter;
@@ -101,6 +104,9 @@ public class AuditLogServiceImpl implements AuditLogService {
         if (affectedRows != 1) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "审计日志写入失败");
         }
+        // 文件审计用于运维排障，与数据库审计记录互补；不记录 content、IP 和 User-Agent 等敏感明细。
+        AUDIT_LOGGER.info("审计记录已写入 operatorId={}, operationType={}, bizType={}, bizId={}",
+                operatorId, operationType, bizType, bizId);
     }
 
     /** 统一构建审计实体，保证尽力记录与严格记录的字段口径完全一致。 */

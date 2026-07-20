@@ -37,6 +37,9 @@ springdoc:
     path: /swagger-ui.html
 
 opsdesk:
+  logging:
+    # 应用日志目录：默认相对后端工作目录，生产环境可通过 opsdesk.logging.path 覆盖。
+    path: logs
   security:
     # JWT 密钥后续在认证模块落地时迁移到环境变量或安全配置中心。
     jwt-secret: dev-only-change-me
