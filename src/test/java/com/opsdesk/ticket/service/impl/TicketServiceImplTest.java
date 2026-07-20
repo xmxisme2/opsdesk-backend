@@ -106,6 +106,7 @@ class TicketServiceImplTest {
         verify(ticketMapper).insert(ticketCaptor.capture());
         assertThat(ticketCaptor.getValue().getTicketNo()).isNull();
         assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("DRAFT");
+        assertThat(ticketCaptor.getValue().getResolutionVerified()).isZero();
         assertThat(ticketVO.ticketNo()).isNull();
         assertThat(ticketVO.status()).isEqualTo("DRAFT");
         verify(ticketNoGenerator, never()).nextNo();

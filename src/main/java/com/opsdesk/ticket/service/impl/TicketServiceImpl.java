@@ -207,6 +207,8 @@ public class TicketServiceImpl implements TicketService {
         ticket.setCreatorId(operatorId);
         ticket.setDueTime(resolveDueTime(request.getDueTime(), category, now));
         ticket.setOverdue(resolveOverdue(ticket.getDueTime(), now));
+        // 新建工单尚未完成，解决结果固定标记为未验证，避免向非空数据库字段写入 null。
+        ticket.setResolutionVerified(0);
         ticket.setTags(normalizeTags(request.getTags()));
         ticket.setCreateTime(now);
         ticket.setUpdateTime(now);
