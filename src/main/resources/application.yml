@@ -46,3 +46,5 @@ opsdesk:
   storage:
     # 附件首版落盘到本地相对目录，接口不返回服务器绝对路径。
     file-root: storage/files
+    # 用户自定义头像与业务附件隔离存储，并通过 /uploads/avatars/** 仅公开图片读取。
+    avatar-root: storage/avatars

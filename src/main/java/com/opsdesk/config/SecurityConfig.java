@@ -49,6 +49,7 @@ public class SecurityConfig {
                                 "/api/auth/sms-code/send",
                                 "/api/auth/refresh",
                                 "/api/users/avatar-options",
+                                "/uploads/avatars/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"

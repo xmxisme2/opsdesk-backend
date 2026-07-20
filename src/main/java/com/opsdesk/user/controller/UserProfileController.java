@@ -14,6 +14,9 @@ import com.opsdesk.user.vo.AvatarOptionsVO;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -45,5 +48,11 @@ public class UserProfileController {
                                                 HttpServletRequest servletRequest) {
         return ApiResponse.success(userProfileService.updateMyProfile(currentUser.getUserId(), request,
                 servletRequest.getRemoteAddr(), servletRequest.getHeader("User-Agent")));
+    }
+
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Idempotent
+    public ApiResponse<UserVO> uploadAvatar(@AuthenticationPrincipal CurrentUser currentUser, @RequestPart("file") MultipartFile file, HttpServletRequest request) {
+        return ApiResponse.success(userProfileService.uploadAvatar(currentUser.getUserId(), file, request.getRemoteAddr(), request.getHeader("User-Agent")));
     }
 }
