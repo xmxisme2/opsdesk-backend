@@ -48,3 +48,29 @@ opsdesk:
     file-root: storage/files
     # 用户自定义头像与业务附件隔离存储，并通过 /uploads/avatars/** 仅公开图片读取。
     avatar-root: storage/avatars
+  sms:
+    # 短信能力开关：完成阿里云 SDK 与校验流程前保持关闭，避免配置密钥后误发短信。
+    enabled: false
+    aliyun-dypnsapi:
+      # 号码认证服务地域与端点：当前按已提供的 ap-southeast-1 配置；SDK 接入时使用此地域创建客户端。
+      region-id: ap-southeast-1
+      endpoint: dypnsapi.aliyuncs.com
+      # 凭据优先从环境变量读取；本地可改为直接填写，但真实密钥禁止提交到 Git。
+      access-key-id: ${ALIBABA_CLOUD_ACCESS_KEY_ID:}
+      access-key-secret: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:}
+      # 已提供的号码认证签名和验证码模板；上线前需在阿里云控制台确认二者处于可用绑定状态。
+      sign-name: 恒创联众
+      template-code: "100001"
+      template-param: '{"code":"##code##","min":"5"}'
+      country-code: "86"
+      # 默认测试收件号码：仅用于本地联调，不得在业务接口中覆盖用户实际填写的手机号。
+      test-phone-number: "15815327709"
+      # 阿里云动态生成六码数字验证码，五分钟有效；同号码一分钟内不重复发送，重复时覆盖旧验证码。
+      code-length: 6
+      code-type: 1
+      valid-time: 300
+      interval: 60
+      duplicate-policy: 1
+      auto-retry: 1
+      # 生产环境禁止返回验证码；验证码由后续 CheckSmsVerifyCode 接口进行校验。
+      return-verify-code: false
