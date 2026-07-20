@@ -171,7 +171,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         StringBuilder content = new StringBuilder("# 问题描述\n\n").append(ticket.getDescription());
         KnowledgeFromTicketRequest safe = request == null ? new KnowledgeFromTicketRequest() : request;
         if (!Boolean.FALSE.equals(safe.getIncludeComments())) {
-            List<TicketComment> comments = commentMapper.searchByTicketId(sourceId, true);
+            // 知识文章可能后续发布给全部用户，生成草稿时只沉淀公开评论，内部备注不得跨域复制。
+            List<TicketComment> comments = commentMapper.searchByTicketId(sourceId, false);
             if (!comments.isEmpty()) {
                 content.append("\n\n# 处理记录\n");
                 comments.forEach(comment -> content.append("\n- ").append(comment.getContent()));
@@ -182,6 +183,16 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         mutation.setCategoryId(null);
         mutation.setSourceTicketId(String.valueOf(sourceId));
         KnowledgeArticleVO result = create(mutation, user, ip, userAgent);
+        if (!Boolean.FALSE.equals(safe.getIncludeAttachments())) {
+            // 附件复制只建立知识文章侧独立元数据引用，来源工单的附件记录保持不变。
+            attachmentService.copyTicketAttachmentsToKnowledge(sourceId, Long.valueOf(result.getId()), user);
+        } else {
+            // 即使不复制附件，也要校验当前用户对来源工单的读取范围，不能仅凭工单 ID 生成草稿。
+            AttachmentSearchRequest attachmentSearch = new AttachmentSearchRequest();
+            attachmentSearch.setBizType(AttachmentResourceAccessService.BIZ_TYPE_TICKET);
+            attachmentSearch.setBizId(String.valueOf(sourceId));
+            attachmentService.search(attachmentSearch, user);
+        }
         audit(requireUserId(user), "KNOWLEDGE_FROM_TICKET", Long.valueOf(result.getId()), "从工单生成知识草稿", ip, userAgent);
         return result;
     }

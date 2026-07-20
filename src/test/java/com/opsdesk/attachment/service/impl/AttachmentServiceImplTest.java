@@ -162,6 +162,31 @@ class AttachmentServiceImplTest {
     }
 
     @Test
+    void copyTicketAttachmentsShouldCreateIndependentKnowledgeAttachmentMetadata() {
+        Attachment source = textAttachment();
+        CurrentUser currentUser = user(10L, "AGENT");
+        when(resourceAccessService.requireReadAccess("TICKET", 100L, currentUser))
+                .thenReturn(new AttachmentResourceScope("TICKET", 100L, 100L));
+        when(resourceAccessService.requireWriteAccess("KNOWLEDGE", 200L, currentUser))
+                .thenReturn(new AttachmentResourceScope("KNOWLEDGE", 200L, null));
+        when(attachmentMapper.findByBiz("TICKET", 100L)).thenReturn(List.of(source));
+        when(attachmentMapper.insert(any(Attachment.class))).thenReturn(1);
+
+        var copied = attachmentService.copyTicketAttachmentsToKnowledge(100L, 200L, currentUser);
+
+        ArgumentCaptor<Attachment> captor = ArgumentCaptor.forClass(Attachment.class);
+        verify(attachmentMapper).insert(captor.capture());
+        assertThat(captor.getValue().getId()).isNotEqualTo(source.getId());
+        assertThat(captor.getValue().getBizType()).isEqualTo("KNOWLEDGE");
+        assertThat(captor.getValue().getBizId()).isEqualTo(200L);
+        assertThat(captor.getValue().getStoragePath()).isEqualTo(source.getStoragePath());
+        assertThat(captor.getValue().getUploaderId()).isEqualTo(10L);
+        assertThat(copied).hasSize(1);
+        verify(auditLogService).record(10L, "ATTACHMENT_COPY", "ATTACHMENT", 200L,
+                "从工单复制附件到知识文章：1 个", null, null);
+    }
+
+    @Test
     void logicalDeleteBoundAttachmentsShouldHideAllFilesBeforeBusinessDeletion() {
         CurrentUser currentUser = user(10L, "MANAGER");
         when(resourceAccessService.normalizeBizType("KNOWLEDGE")).thenReturn("KNOWLEDGE");

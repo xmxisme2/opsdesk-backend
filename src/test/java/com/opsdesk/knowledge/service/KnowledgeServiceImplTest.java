@@ -78,6 +78,44 @@ class KnowledgeServiceImplTest {
         verify(articleMapper, never()).insert(any(KnowledgeArticle.class));
     }
 
+    @Test
+    void fromTicketCopiesDirectAttachmentsWhenRequested() {
+        Ticket ticket = new Ticket(); ticket.setId(3L); ticket.setStatus("CLOSED"); ticket.setTitle("VPN 故障"); ticket.setDescription("无法连接");
+        KnowledgeArticleRow draft = article(9L, "DRAFT", 1L);
+        when(ticketMapper.findById(3L)).thenReturn(ticket);
+        when(articleMapper.findById(9L)).thenReturn(draft);
+        when(articleMapper.insert(any(KnowledgeArticle.class))).thenReturn(1);
+        when(attachmentService.search(any(), any())).thenReturn(List.of());
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        when(idGenerator.nextId()).thenReturn(9L);
+        service = new KnowledgeServiceImpl(articleMapper, mock(KnowledgeCategoryMapper.class), mock(KnowledgeTagMapper.class),
+                ticketMapper, mock(TicketCommentMapper.class), new KnowledgeConverter(), idGenerator, mock(AuditLogService.class), attachmentService);
+
+        service.fromTicket("3", new KnowledgeFromTicketRequest(), user("AGENT"), "ip", "ua");
+
+        verify(attachmentService).copyTicketAttachmentsToKnowledge(eq(3L), eq(9L), any(CurrentUser.class));
+    }
+
+    @Test
+    void fromTicketSkipsAttachmentCopyWhenNotRequestedButStillVerifiesTicketAccess() {
+        Ticket ticket = new Ticket(); ticket.setId(3L); ticket.setStatus("COMPLETED"); ticket.setTitle("VPN 故障"); ticket.setDescription("已恢复");
+        KnowledgeArticleRow draft = article(9L, "DRAFT", 1L);
+        KnowledgeFromTicketRequest request = new KnowledgeFromTicketRequest(); request.setIncludeAttachments(false);
+        when(ticketMapper.findById(3L)).thenReturn(ticket);
+        when(articleMapper.findById(9L)).thenReturn(draft);
+        when(articleMapper.insert(any(KnowledgeArticle.class))).thenReturn(1);
+        when(attachmentService.search(any(), any())).thenReturn(List.of());
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        when(idGenerator.nextId()).thenReturn(9L);
+        service = new KnowledgeServiceImpl(articleMapper, mock(KnowledgeCategoryMapper.class), mock(KnowledgeTagMapper.class),
+                ticketMapper, mock(TicketCommentMapper.class), new KnowledgeConverter(), idGenerator, mock(AuditLogService.class), attachmentService);
+
+        service.fromTicket("3", request, user("AGENT"), "ip", "ua");
+
+        verify(attachmentService, never()).copyTicketAttachmentsToKnowledge(anyLong(), anyLong(), any());
+        verify(attachmentService, atLeastOnce()).search(any(), any());
+    }
+
     private CurrentUser user(String role) { return new CurrentUser(1L, "13800000000", "测试用户", List.of(role), List.of()); }
     private KnowledgeArticleRow article(Long id, String status, Long authorId) {
         KnowledgeArticleRow row = new KnowledgeArticleRow(); row.setId(id); row.setStatus(status); row.setAuthorId(authorId);

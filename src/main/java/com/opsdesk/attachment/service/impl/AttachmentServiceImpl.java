@@ -62,6 +62,9 @@ public class AttachmentServiceImpl implements AttachmentService {
     /** 删除审计动作：附件逻辑删除成功后记录。 */
     private static final String AUDIT_OPERATION_DELETE = "ATTACHMENT_DELETE";
 
+    /** 引用复制审计动作：从工单复制附件元数据到知识文章，不复制物理文件。 */
+    private static final String AUDIT_OPERATION_COPY = "ATTACHMENT_COPY";
+
     private final AttachmentMapper attachmentMapper;
     private final AttachmentStorage attachmentStorage;
     private final AttachmentFilePolicy filePolicy;
@@ -195,6 +198,50 @@ public class AttachmentServiceImpl implements AttachmentService {
             attachment.setTempToken(null);
             return attachmentConverter.toVO(attachment);
         }).toList();
+    }
+
+    @Override
+    @Transactional
+    public List<AttachmentVO> copyTicketAttachmentsToKnowledge(Long ticketId,
+                                                                Long knowledgeArticleId,
+                                                                CurrentUser currentUser) {
+        Long operatorId = requireUserId(currentUser);
+        if (ticketId == null || ticketId <= 0 || knowledgeArticleId == null || knowledgeArticleId <= 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "工单ID和知识文章ID必须为正整数");
+        }
+        resourceAccessService.requireReadAccess(AttachmentResourceAccessService.BIZ_TYPE_TICKET, ticketId, currentUser);
+        resourceAccessService.requireWriteAccess(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE, knowledgeArticleId, currentUser);
+        List<Attachment> sourceAttachments = attachmentMapper.findByBiz(AttachmentResourceAccessService.BIZ_TYPE_TICKET, ticketId);
+        List<AttachmentVO> copied = sourceAttachments.stream().map(source -> {
+            Attachment target = new Attachment();
+            target.setId(idGenerator.nextId());
+            target.setBizType(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE);
+            target.setBizId(knowledgeArticleId);
+            target.setFileName(source.getFileName());
+            target.setFileSize(source.getFileSize());
+            target.setContentType(source.getContentType());
+            target.setExtension(source.getExtension());
+            target.setPreviewable(source.getPreviewable());
+            target.setPreviewType(source.getPreviewType());
+            target.setDownloadOnly(source.getDownloadOnly());
+            target.setStoragePath(source.getStoragePath());
+            target.setUploaderId(operatorId);
+            target.setUploaderName(currentUser.getUsername());
+            target.setCreateTime(LocalDateTime.now());
+            target.setUpdateTime(target.getCreateTime());
+            target.setCreateBy(operatorId);
+            target.setUpdateBy(operatorId);
+            target.setDeleted(0);
+            if (attachmentMapper.insert(target) != 1) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "复制知识文章附件失败");
+            }
+            return attachmentConverter.toVO(target);
+        }).toList();
+        if (!copied.isEmpty()) {
+            auditLogService.record(operatorId, AUDIT_OPERATION_COPY, AUDIT_BIZ_TYPE, knowledgeArticleId,
+                    "从工单复制附件到知识文章：" + copied.size() + " 个", null, null);
+        }
+        return copied;
     }
 
     @Override
