@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import com.opsdesk.user.entity.SysUser;
 
 /**
  * 团队成员数据访问 Mapper。
@@ -24,6 +25,8 @@ public interface TeamMemberMapper {
 
     List<TeamMember> searchMembers(@Param("teamId") Long teamId,
                                    @Param("keyword") String keyword);
+
+    List<SysUser> searchCandidateUsers(@Param("keyword") String keyword);
 
     int countActive(@Param("teamId") Long teamId,
                     @Param("userId") Long userId);

@@ -5,7 +5,7 @@
 
     <!-- 工单基础字段：列表、详情共用，SLA/状态字段显式列出。 -->
     <sql id="TicketColumns">
-        id, ticket_no, title, description, category_id, priority, status, creator_id, assignee_id,
+        id, ticket_no, title, description, resolution_summary, resolution_steps, resolution_verified, category_id, priority, status, creator_id, assignee_id,
         team_id, due_time, completed_time, closed_time, overdue, tags, create_time, update_time,
         create_by, update_by, deleted
     </sql>
@@ -33,7 +33,7 @@
     </select>
 
     <select id="findOverdueCandidates" resultType="com.opsdesk.ticket.entity.Ticket">
-        SELECT t.id, t.ticket_no, t.title, t.description, t.category_id, t.priority, t.status,
+        SELECT t.id, t.ticket_no, t.title, t.description, t.resolution_summary, t.resolution_steps, t.resolution_verified, t.category_id, t.priority, t.status,
                t.creator_id, t.assignee_id, t.team_id, t.due_time, t.completed_time, t.closed_time,
                t.overdue, t.tags, t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
         FROM ticket t
@@ -48,12 +48,12 @@
 
     <insert id="insert">
         INSERT INTO ticket (
-          id, ticket_no, title, description, category_id, priority, status, creator_id,
+          id, ticket_no, title, description, resolution_summary, resolution_steps, resolution_verified, category_id, priority, status, creator_id,
           assignee_id, team_id, due_time, completed_time, closed_time, overdue, tags,
           create_by, update_by, deleted
         )
         VALUES (
-          #{id}, #{ticketNo}, #{title}, #{description}, #{categoryId}, #{priority}, #{status}, #{creatorId},
+          #{id}, #{ticketNo}, #{title}, #{description}, #{resolutionSummary}, #{resolutionSteps}, #{resolutionVerified}, #{categoryId}, #{priority}, #{status}, #{creatorId},
           #{assigneeId}, #{teamId}, #{dueTime}, #{completedTime}, #{closedTime}, #{overdue}, #{tags},
           #{createBy}, #{updateBy}, 0
         )
@@ -64,6 +64,9 @@
         SET ticket_no = #{ticketNo},
             title = #{title},
             description = #{description},
+            resolution_summary = #{resolutionSummary},
+            resolution_steps = #{resolutionSteps},
+            resolution_verified = #{resolutionVerified},
             category_id = #{categoryId},
             priority = #{priority},
             status = #{status},
@@ -90,7 +93,7 @@
     </update>
 
     <select id="search" resultType="com.opsdesk.ticket.entity.Ticket">
-        SELECT t.id, t.ticket_no, t.title, t.description, t.category_id, t.priority, t.status,
+        SELECT t.id, t.ticket_no, t.title, t.description, t.resolution_summary, t.resolution_steps, t.resolution_verified, t.category_id, t.priority, t.status,
                t.creator_id, t.assignee_id, t.team_id, t.due_time, t.completed_time, t.closed_time,
                t.overdue, t.tags, t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
         FROM ticket t
@@ -222,7 +225,7 @@
     </select>
 
     <select id="findWorkbenchLatest" resultType="com.opsdesk.ticket.entity.Ticket">
-        SELECT t.id, t.ticket_no, t.title, t.description, t.category_id, t.priority, t.status,
+        SELECT t.id, t.ticket_no, t.title, t.description, t.resolution_summary, t.resolution_steps, t.resolution_verified, t.category_id, t.priority, t.status,
                t.creator_id, t.assignee_id, t.team_id, t.due_time, t.completed_time, t.closed_time,
                t.overdue, t.tags, t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
         FROM ticket t
@@ -384,7 +387,7 @@
     </select>
 
     <select id="findDashboardOverdueTickets" resultType="com.opsdesk.ticket.entity.Ticket">
-        SELECT t.id, t.ticket_no, t.title, t.description, t.category_id, t.priority, t.status,
+        SELECT t.id, t.ticket_no, t.title, t.description, t.resolution_summary, t.resolution_steps, t.resolution_verified, t.category_id, t.priority, t.status,
                t.creator_id, t.assignee_id, t.team_id, t.due_time, t.completed_time, t.closed_time,
                t.overdue, t.tags, t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
         FROM ticket t

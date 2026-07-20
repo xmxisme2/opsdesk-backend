@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.system.mapper.SystemConfigMapper">
+    <select id="findByGroup" resultType="com.opsdesk.system.entity.SystemConfig">
+        SELECT id, config_key, config_value
+        FROM system_config
+        WHERE config_group = #{group} AND deleted = 0
+        ORDER BY id ASC
+    </select>
+    <update id="updateValue">
+        UPDATE system_config
+        SET config_value = #{value}, update_by = #{operatorId}, update_time = CURRENT_TIMESTAMP
+        WHERE config_key = #{key} AND editable = 1 AND deleted = 0
+    </update>
+</mapper>

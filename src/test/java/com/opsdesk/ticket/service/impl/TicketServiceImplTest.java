@@ -13,6 +13,7 @@ import com.opsdesk.ticket.dto.TicketCreateRequest;
 import com.opsdesk.ticket.converter.TicketConverter;
 import com.opsdesk.ticket.dto.TicketReasonRequest;
 import com.opsdesk.ticket.dto.TicketTransferRequest;
+import com.opsdesk.ticket.dto.TicketUpdateRequest;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.entity.TicketCategory;
 import com.opsdesk.ticket.entity.TicketOperationLog;
@@ -96,7 +97,7 @@ class TicketServiceImplTest {
 
     @Test
     void createShouldKeepTicketNoNullForDraft() {
-        when(ticketCategoryMapper.findById(1L)).thenReturn(category());
+        when(ticketCategoryMapper.findByIdForUpdate(1L)).thenReturn(category());
         TicketCreateRequest request = createRequest(false);
 
         TicketVO ticketVO = ticketService.create(request, user(10L, "USER"), "127.0.0.1", "JUnit");
@@ -105,6 +106,7 @@ class TicketServiceImplTest {
         verify(ticketMapper).insert(ticketCaptor.capture());
         assertThat(ticketCaptor.getValue().getTicketNo()).isNull();
         assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("DRAFT");
+        assertThat(ticketCaptor.getValue().getResolutionVerified()).isZero();
         assertThat(ticketVO.ticketNo()).isNull();
         assertThat(ticketVO.status()).isEqualTo("DRAFT");
         verify(ticketNoGenerator, never()).nextNo();
@@ -113,7 +115,7 @@ class TicketServiceImplTest {
 
     @Test
     void createShouldGenerateTicketNoWhenSubmitNow() {
-        when(ticketCategoryMapper.findById(1L)).thenReturn(category());
+        when(ticketCategoryMapper.findByIdForUpdate(1L)).thenReturn(category());
         when(ticketNoGenerator.nextNo()).thenReturn("TK202606160001");
         TicketCreateRequest request = createRequest(true);
 
@@ -128,9 +130,38 @@ class TicketServiceImplTest {
     }
 
     @Test
+    void createShouldLockCategoryBeforeWritingTicketReference() {
+        when(ticketCategoryMapper.findByIdForUpdate(1L)).thenReturn(category());
+
+        ticketService.create(createRequest(false), user(10L, "USER"), "127.0.0.1", "JUnit");
+
+        var order = org.mockito.Mockito.inOrder(ticketCategoryMapper, ticketMapper);
+        order.verify(ticketCategoryMapper).findByIdForUpdate(1L);
+        order.verify(ticketMapper).insert(any(Ticket.class));
+    }
+
+    @Test
+    void updateDraftShouldLockNewCategoryBeforeChangingReference() {
+        when(ticketMapper.findById(100L)).thenReturn(draftTicket(10L));
+        when(ticketCategoryMapper.findByIdForUpdate(1L)).thenReturn(category());
+        when(ticketMapper.update(any(Ticket.class))).thenReturn(1);
+        TicketUpdateRequest request = new TicketUpdateRequest();
+        request.setTitle("无法登录系统");
+        request.setDescription("登录时报错，请协助排查。");
+        request.setCategoryId("1");
+        request.setPriority("MEDIUM");
+
+        ticketService.updateDraft("100", request, user(10L, "USER"), "127.0.0.1", "JUnit");
+
+        var order = org.mockito.Mockito.inOrder(ticketCategoryMapper, ticketMapper);
+        order.verify(ticketCategoryMapper).findByIdForUpdate(1L);
+        order.verify(ticketMapper).update(any(Ticket.class));
+    }
+
+    @Test
     void submitShouldGenerateTicketNoAndMoveToPendingAssign() {
         when(ticketMapper.findById(100L)).thenReturn(draftTicket(10L));
-        when(ticketCategoryMapper.findById(1L)).thenReturn(category());
+        when(ticketCategoryMapper.findByIdForUpdate(1L)).thenReturn(category());
         when(ticketNoGenerator.nextNo()).thenReturn("TK202606160001");
         when(ticketMapper.update(any(Ticket.class))).thenReturn(1);
 

@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * 工单分类树返回对象。
  *
- * <p>包含默认团队和默认 SLA，供创建工单时展示分派建议和截止时间预估。</p>
+ * <p>包含默认团队和默认 SLA，既用于分类树展示，也作为管理员新增、编辑后的统一返回结构。</p>
  */
 public record TicketCategoryVO(
         String id,

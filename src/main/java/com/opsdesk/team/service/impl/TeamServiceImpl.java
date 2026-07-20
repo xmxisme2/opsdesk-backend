@@ -24,6 +24,7 @@ import com.opsdesk.team.mapper.TeamMemberMapper;
 import com.opsdesk.team.service.TeamService;
 import com.opsdesk.team.vo.TeamMemberVO;
 import com.opsdesk.team.vo.TeamVO;
+import com.opsdesk.team.vo.TeamCandidateUserVO;
 import com.opsdesk.user.entity.SysUser;
 import com.opsdesk.user.mapper.SysUserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -118,6 +119,13 @@ public class TeamServiceImpl implements TeamService {
     }
 
     @Override
+    public PageResult<TeamVO> searchManaged(TeamSearchRequest request, CurrentUser currentUser) {
+        TeamSearchRequest safeRequest = request == null ? new TeamSearchRequest() : request;
+        return PageHelperPageResult.selectPage(safeRequest,
+                () -> teamMapper.searchManagedByLeader(currentUser.getUserId(), safeRequest.normalizedKeyword()), this::assembleTeamVO);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public TeamVO create(TeamCreateRequest request, Long operatorId, String requestIp, String userAgent) {
         List<Long> leaderIds = parseRequiredLeaderIds(request.getLeaderIds());
@@ -203,14 +211,28 @@ public class TeamServiceImpl implements TeamService {
     }
 
     @Override
+    public PageResult<TeamCandidateUserVO> searchCandidates(String id, TeamMemberSearchRequest request, CurrentUser currentUser) {
+        Long teamId = IdParser.parseRequired(id, "团队ID");
+        loadTeam(teamId);
+        ensureMemberMaintenanceScope(teamId, currentUser);
+        TeamMemberSearchRequest safeRequest = request == null ? new TeamMemberSearchRequest() : request;
+        return PageHelperPageResult.selectPage(safeRequest, () -> teamMemberMapper.searchCandidateUsers(safeRequest.normalizedKeyword()), user -> {
+            Department department = departmentMapper == null || user.getDepartmentId() == null ? null : departmentMapper.findById(user.getDepartmentId());
+            return new TeamCandidateUserVO(String.valueOf(user.getId()), user.getUsername(), user.getNickname(), user.getPhone(), department == null ? null : department.getName());
+        });
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public TeamVO updateMembers(String id,
                                 TeamMemberUpdateRequest request,
-                                Long operatorId,
+                                CurrentUser currentUser,
                                 String requestIp,
                                 String userAgent) {
         Long teamId = IdParser.parseRequired(id, "团队ID");
         loadTeam(teamId);
+        ensureMemberMaintenanceScope(teamId, currentUser);
+        Long operatorId = currentUser.getUserId();
         List<TeamMemberUpdateRequest.MemberItem> members = request == null || request.getMembers() == null
                 ? List.of()
                 : request.getMembers();
@@ -228,6 +250,12 @@ public class TeamServiceImpl implements TeamService {
             }
         }
         memberIds = memberIds.stream().distinct().toList();
+        if (!currentUser.getRoles().contains(ROLE_ADMIN)) {
+            Set<Long> existingLeaderIds = new LinkedHashSet<>(teamMemberMapper.findLeaderIdsByTeamId(teamId));
+            if (!existingLeaderIds.equals(leaderIds)) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "团队负责人只能维护普通成员，不能调整负责人");
+            }
+        }
         validateUsers(memberIds);
         replaceMembers(teamId, memberIds, leaderIds, operatorId);
         auditLogService.record(operatorId, OPERATION_TEAM_MEMBER_UPDATE, BIZ_TYPE_TEAM, teamId,
@@ -320,6 +348,18 @@ public class TeamServiceImpl implements TeamService {
                 || !currentUser.getRoles().contains(ROLE_MANAGER)
                 || teamMemberMapper.countLeader(teamId, currentUser.getUserId()) == 0) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "团队负责人只能查看自己负责团队的成员");
+        }
+    }
+
+    /** 团队负责人只能维护自己负责团队的普通成员，负责人集合仍由管理员专属接口维护。 */
+    private void ensureMemberMaintenanceScope(Long teamId, CurrentUser currentUser) {
+        if (currentUser != null && currentUser.getRoles().contains(ROLE_ADMIN)) {
+            return;
+        }
+        if (currentUser == null
+                || !currentUser.getRoles().contains(ROLE_MANAGER)
+                || teamMemberMapper.countLeader(teamId, currentUser.getUserId()) == 0) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "团队负责人只能维护自己负责团队的成员");
         }
     }
 

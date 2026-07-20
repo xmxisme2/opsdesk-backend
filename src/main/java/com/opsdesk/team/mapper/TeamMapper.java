@@ -27,6 +27,8 @@ public interface TeamMapper {
                       @Param("departmentId") Long departmentId,
                       @Param("enabled") Integer enabled);
 
+    List<Team> searchManagedByLeader(@Param("leaderId") Long leaderId, @Param("keyword") String keyword);
+
     int insert(Team team);
 
     int update(Team team);

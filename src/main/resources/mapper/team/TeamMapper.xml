@@ -91,4 +91,16 @@
         </if>
         ORDER BY t.create_time DESC, t.id DESC
     </select>
+
+    <select id="searchManagedByLeader" resultType="com.opsdesk.team.entity.Team">
+        SELECT t.id, t.name, t.description, t.processing_scope, t.enabled,
+               t.create_time, t.update_time, t.create_by, t.update_by, t.deleted
+        FROM team t
+        INNER JOIN team_member tm ON tm.team_id = t.id AND tm.deleted = 0
+        WHERE t.deleted = 0 AND tm.user_id = #{leaderId} AND tm.leader_flag = 1
+        <if test="keyword != null and keyword != ''">
+          AND (t.name LIKE CONCAT('%', #{keyword}, '%') OR t.processing_scope LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY t.create_time DESC, t.id DESC
+    </select>
 </mapper>

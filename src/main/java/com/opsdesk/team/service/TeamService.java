@@ -10,6 +10,7 @@ import com.opsdesk.team.dto.TeamSearchRequest;
 import com.opsdesk.team.dto.TeamUpdateRequest;
 import com.opsdesk.team.vo.TeamMemberVO;
 import com.opsdesk.team.vo.TeamVO;
+import com.opsdesk.team.vo.TeamCandidateUserVO;
 
 /**
  * 团队管理服务。
@@ -19,6 +20,8 @@ import com.opsdesk.team.vo.TeamVO;
 public interface TeamService {
 
     PageResult<TeamVO> search(TeamSearchRequest request);
+
+    PageResult<TeamVO> searchManaged(TeamSearchRequest request, CurrentUser currentUser);
 
     TeamVO create(TeamCreateRequest request, Long operatorId, String requestIp, String userAgent);
 
@@ -30,7 +33,9 @@ public interface TeamService {
 
     PageResult<TeamMemberVO> searchMembers(String id, TeamMemberSearchRequest request, CurrentUser currentUser);
 
-    TeamVO updateMembers(String id, TeamMemberUpdateRequest request, Long operatorId, String requestIp, String userAgent);
+    PageResult<TeamCandidateUserVO> searchCandidates(String id, TeamMemberSearchRequest request, CurrentUser currentUser);
+
+    TeamVO updateMembers(String id, TeamMemberUpdateRequest request, CurrentUser currentUser, String requestIp, String userAgent);
 
     TeamVO updateLeaders(String id, TeamLeaderUpdateRequest request, Long operatorId, String requestIp, String userAgent);
 }

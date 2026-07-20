@@ -17,6 +17,29 @@
         LIMIT 1
     </select>
 
+    <!-- 写事务统一锁定分类行，删除与新增引用必须遵守同一锁协议。 -->
+    <select id="findByIdForUpdate" resultType="com.opsdesk.ticket.entity.TicketCategory">
+        SELECT <include refid="TicketCategoryColumns"/>
+        FROM ticket_category
+        WHERE id = #{id}
+          AND deleted = 0
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <!-- 分类移动一次性按主键升序加锁，保证所有事务使用相同锁顺序。 -->
+    <select id="findByIdsForUpdate" resultType="com.opsdesk.ticket.entity.TicketCategory">
+        SELECT <include refid="TicketCategoryColumns"/>
+        FROM ticket_category
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND deleted = 0
+        ORDER BY id ASC
+        FOR UPDATE
+    </select>
+
     <select id="searchTree" resultType="com.opsdesk.ticket.entity.TicketCategory">
         SELECT <include refid="TicketCategoryColumns"/>
         FROM ticket_category
@@ -29,4 +52,87 @@
         </if>
         ORDER BY parent_id ASC, sort ASC, id ASC
     </select>
+
+    <select id="countByParentAndName" resultType="int">
+        SELECT COUNT(1)
+        FROM ticket_category
+        WHERE deleted = 0
+        <choose>
+            <when test="parentId != null">
+                AND parent_id = #{parentId}
+            </when>
+            <otherwise>
+                AND parent_id IS NULL
+            </otherwise>
+        </choose>
+          AND name = #{name}
+        <if test="excludeId != null">
+          AND id != #{excludeId}
+        </if>
+    </select>
+
+    <!-- 递归查询候选父级是否位于当前分类后代中，用于阻止分类树形成循环。 -->
+    <select id="countDescendantRelation" resultType="int">
+        WITH RECURSIVE category_descendants AS (
+            SELECT id, parent_id
+            FROM ticket_category
+            WHERE parent_id = #{categoryId}
+              AND deleted = 0
+            UNION ALL
+            SELECT child.id, child.parent_id
+            FROM ticket_category child
+            INNER JOIN category_descendants descendant ON child.parent_id = descendant.id
+            WHERE child.deleted = 0
+        )
+        SELECT COUNT(1)
+        FROM category_descendants
+        WHERE id = #{candidateParentId}
+    </select>
+
+    <select id="countChildren" resultType="int">
+        SELECT COUNT(1)
+        FROM ticket_category
+        WHERE parent_id = #{parentId}
+          AND deleted = 0
+    </select>
+
+    <select id="countTickets" resultType="int">
+        SELECT COUNT(1)
+        FROM ticket
+        WHERE category_id = #{categoryId}
+          AND deleted = 0
+    </select>
+
+    <insert id="insert" parameterType="com.opsdesk.ticket.entity.TicketCategory">
+        INSERT INTO ticket_category (
+            id, parent_id, name, default_team_id, default_sla_hours, sort, enabled,
+            create_time, update_time, create_by, update_by, deleted
+        ) VALUES (
+            #{id}, #{parentId}, #{name}, #{defaultTeamId}, #{defaultSlaHours}, #{sort}, #{enabled},
+            NOW(), NOW(), #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
+    <update id="update" parameterType="com.opsdesk.ticket.entity.TicketCategory">
+        UPDATE ticket_category
+        SET parent_id = #{parentId},
+            name = #{name},
+            default_team_id = #{defaultTeamId},
+            default_sla_hours = #{defaultSlaHours},
+            sort = #{sort},
+            enabled = #{enabled},
+            update_by = #{updateBy},
+            update_time = NOW()
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
+
+    <update id="logicalDelete">
+        UPDATE ticket_category
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = NOW()
+        WHERE id = #{id}
+          AND deleted = 0
+    </update>
 </mapper>

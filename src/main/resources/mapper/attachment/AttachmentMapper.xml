@@ -70,6 +70,38 @@
           AND deleted = 0
     </update>
 
+    <select id="findTemporaryByIds" resultType="com.opsdesk.attachment.entity.Attachment">
+        SELECT <include refid="AttachmentColumns"/>,
+               COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone) AS uploader_name
+        FROM ticket_attachment a
+        LEFT JOIN sys_user u ON u.id = a.uploader_id AND u.deleted = 0
+        WHERE a.biz_type = #{bizType}
+          AND a.biz_id IS NULL
+          AND a.uploader_id = #{uploaderId}
+          AND a.deleted = 0
+          AND a.id IN
+          <foreach collection="attachmentIds" item="attachmentId" open="(" separator="," close=")">
+              #{attachmentId}
+          </foreach>
+        ORDER BY a.create_time ASC, a.id ASC
+    </select>
+
+    <update id="bindTemporaryByIds">
+        UPDATE ticket_attachment
+        SET biz_id = #{bizId},
+            temp_token = NULL,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE biz_type = #{bizType}
+          AND biz_id IS NULL
+          AND uploader_id = #{uploaderId}
+          AND deleted = 0
+          AND id IN
+          <foreach collection="attachmentIds" item="attachmentId" open="(" separator="," close=")">
+              #{attachmentId}
+          </foreach>
+    </update>
+
     <select id="lockTicket" resultType="long">
         SELECT id
         FROM ticket
@@ -103,6 +135,16 @@
             update_by = #{operatorId},
             update_time = CURRENT_TIMESTAMP
         WHERE id = #{id}
+          AND deleted = 0
+    </update>
+
+    <update id="logicalDeleteByBiz">
+        UPDATE ticket_attachment
+        SET deleted = 1,
+            update_by = #{operatorId},
+            update_time = CURRENT_TIMESTAMP
+        WHERE biz_type = #{bizType}
+          AND biz_id = #{bizId}
           AND deleted = 0
     </update>
 

@@ -4,6 +4,7 @@ import com.opsdesk.common.ratelimit.RateLimitExceededException;
 import com.opsdesk.common.ratelimit.RateLimitExceededVO;
 import com.opsdesk.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -21,6 +22,7 @@ import java.util.stream.Collectors;
  * <p>将后端异常统一转换为 ApiResponse，保证前端始终按同一协议解析错误。</p>
  */
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
@@ -73,6 +75,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnknownException(Exception exception) {
+        // 响应对外保持通用错误，服务端必须记录完整堆栈以便定位未预期异常。
+        log.error("未处理的系统异常", exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(ErrorCode.SYSTEM_ERROR));
     }

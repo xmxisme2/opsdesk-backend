@@ -4,6 +4,8 @@ import com.opsdesk.notification.service.NotificationService;
 import com.opsdesk.team.mapper.TeamMemberMapper;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.mapper.TicketMapper;
+import com.opsdesk.user.entity.SysUser;
+import com.opsdesk.user.mapper.SysUserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,13 +35,16 @@ class TicketOverdueScanServiceImplTest {
     private TeamMemberMapper teamMemberMapper;
 
     @Mock
+    private SysUserMapper sysUserMapper;
+
+    @Mock
     private NotificationService notificationService;
 
     private TicketOverdueScanServiceImpl overdueScanService;
 
     @BeforeEach
     void setUp() {
-        overdueScanService = new TicketOverdueScanServiceImpl(ticketMapper, teamMemberMapper, notificationService);
+        overdueScanService = new TicketOverdueScanServiceImpl(ticketMapper, teamMemberMapper, sysUserMapper, notificationService);
     }
 
     @Test
@@ -49,26 +54,15 @@ class TicketOverdueScanServiceImplTest {
         when(ticketMapper.findOverdueCandidates(now, 200)).thenReturn(List.of(ticket));
         when(ticketMapper.markOverdue(100L)).thenReturn(1);
         when(teamMemberMapper.findLeaderIdsByTeamId(1L)).thenReturn(List.of(20L, 30L));
+        when(sysUserMapper.findById(20L)).thenReturn(user(20L, "处理人小王"));
 
         int updatedCount = overdueScanService.scanOverdueTickets(now);
 
         assertThat(updatedCount).isEqualTo(1);
-        verify(notificationService).createTicketNotification(
-                20L,
-                "TICKET_OVERDUE",
-                "工单已超时",
-                "工单 TK202607030001 已超过 SLA 截止时间，请及时处理",
-                100L,
-                null
-        );
-        verify(notificationService).createTicketNotification(
-                30L,
-                "TICKET_OVERDUE",
-                "工单已超时",
-                "工单 TK202607030001 已超过 SLA 截止时间，请及时处理",
-                100L,
-                null
-        );
+        verify(notificationService).createTicketNotification(20L, "TICKET_OVERDUE",
+                java.util.Map.of("ticketNo", "TK202607030001", "assignee", "处理人小王"), 100L, null);
+        verify(notificationService).createTicketNotification(30L, "TICKET_OVERDUE",
+                java.util.Map.of("ticketNo", "TK202607030001", "assignee", "处理人小王"), 100L, null);
     }
 
     @Test
@@ -82,14 +76,8 @@ class TicketOverdueScanServiceImplTest {
         int updatedCount = overdueScanService.scanOverdueTickets(now);
 
         assertThat(updatedCount).isEqualTo(1);
-        verify(notificationService).createTicketNotification(
-                31L,
-                "TICKET_OVERDUE",
-                "工单已超时",
-                "工单 TK202607030002 已超过 SLA 截止时间，请及时处理",
-                101L,
-                null
-        );
+        verify(notificationService).createTicketNotification(31L, "TICKET_OVERDUE",
+                java.util.Map.of("ticketNo", "TK202607030002", "assignee", "待分派"), 101L, null);
     }
 
     @Test
@@ -123,5 +111,14 @@ class TicketOverdueScanServiceImplTest {
         ticket.setOverdue(0);
         ticket.setDueTime(LocalDateTime.of(2026, 7, 3, 9, 0));
         return ticket;
+    }
+
+    /** 创建超时扫描所需的最小处理人测试数据。 */
+    private SysUser user(Long id, String nickname) {
+        SysUser user = new SysUser();
+        user.setId(id);
+        user.setNickname(nickname);
+        user.setUsername(nickname);
+        return user;
     }
 }

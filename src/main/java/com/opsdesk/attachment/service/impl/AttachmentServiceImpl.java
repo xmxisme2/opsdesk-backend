@@ -32,6 +32,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.regex.Pattern;
 
 /**
@@ -43,8 +44,6 @@ import java.util.regex.Pattern;
 public class AttachmentServiceImpl implements AttachmentService {
 
     /** 单工单附件上限：包含工单直接附件和所属评论附件，来自附件需求，禁止外部覆盖。 */
-    private static final long MAX_FILES_PER_TICKET = 10L;
-
     /** 文本预览最大字节数：最多读取前 1MB，超出时返回 truncated=true。 */
     private static final int MAX_TEXT_PREVIEW_BYTES = 1024 * 1024;
 
@@ -62,6 +61,9 @@ public class AttachmentServiceImpl implements AttachmentService {
 
     /** 删除审计动作：附件逻辑删除成功后记录。 */
     private static final String AUDIT_OPERATION_DELETE = "ATTACHMENT_DELETE";
+
+    /** 引用复制审计动作：从工单复制附件元数据到知识文章，不复制物理文件。 */
+    private static final String AUDIT_OPERATION_COPY = "ATTACHMENT_COPY";
 
     private final AttachmentMapper attachmentMapper;
     private final AttachmentStorage attachmentStorage;
@@ -159,6 +161,104 @@ public class AttachmentServiceImpl implements AttachmentService {
             attachments = attachmentMapper.findByTempToken(bizType, tempToken, operatorId);
         }
         return attachments.stream().map(attachmentConverter::toVO).toList();
+    }
+
+    @Override
+    @Transactional
+    public List<AttachmentVO> bindTemporaryAttachments(String bizType,
+                                                        Long bizId,
+                                                        List<String> attachmentIds,
+                                                        CurrentUser currentUser) {
+        Long operatorId = requireUserId(currentUser);
+        if (attachmentIds == null || attachmentIds.isEmpty()) {
+            return List.of();
+        }
+        String normalizedBizType = resourceAccessService.normalizeBizType(bizType);
+        if (bizId == null || bizId <= 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "业务资源ID必须为正整数");
+        }
+        resourceAccessService.requireWriteAccess(normalizedBizType, bizId, currentUser);
+        List<Long> ids = attachmentIds.stream()
+                .filter(StringUtils::hasText)
+                .map(value -> IdParser.parseRequired(value, "附件ID"))
+                .collect(java.util.stream.Collectors.collectingAndThen(
+                        java.util.stream.Collectors.toCollection(LinkedHashSet::new), List::copyOf));
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        List<Attachment> attachments = attachmentMapper.findTemporaryByIds(normalizedBizType, ids, operatorId);
+        if (attachments.size() != ids.size()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "只能绑定本人尚未关联业务的临时附件");
+        }
+        if (attachmentMapper.bindTemporaryByIds(normalizedBizType, ids, operatorId, bizId, operatorId) != ids.size()) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "附件状态已变化，请刷新后重试");
+        }
+        return attachments.stream().map(attachment -> {
+            attachment.setBizId(bizId);
+            attachment.setTempToken(null);
+            return attachmentConverter.toVO(attachment);
+        }).toList();
+    }
+
+    @Override
+    @Transactional
+    public List<AttachmentVO> copyTicketAttachmentsToKnowledge(Long ticketId,
+                                                                Long knowledgeArticleId,
+                                                                CurrentUser currentUser) {
+        Long operatorId = requireUserId(currentUser);
+        if (ticketId == null || ticketId <= 0 || knowledgeArticleId == null || knowledgeArticleId <= 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "工单ID和知识文章ID必须为正整数");
+        }
+        resourceAccessService.requireReadAccess(AttachmentResourceAccessService.BIZ_TYPE_TICKET, ticketId, currentUser);
+        resourceAccessService.requireWriteAccess(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE, knowledgeArticleId, currentUser);
+        List<Attachment> sourceAttachments = attachmentMapper.findByBiz(AttachmentResourceAccessService.BIZ_TYPE_TICKET, ticketId);
+        List<AttachmentVO> copied = sourceAttachments.stream().map(source -> {
+            Attachment target = new Attachment();
+            target.setId(idGenerator.nextId());
+            target.setBizType(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE);
+            target.setBizId(knowledgeArticleId);
+            target.setFileName(source.getFileName());
+            target.setFileSize(source.getFileSize());
+            target.setContentType(source.getContentType());
+            target.setExtension(source.getExtension());
+            target.setPreviewable(source.getPreviewable());
+            target.setPreviewType(source.getPreviewType());
+            target.setDownloadOnly(source.getDownloadOnly());
+            target.setStoragePath(source.getStoragePath());
+            target.setUploaderId(operatorId);
+            target.setUploaderName(currentUser.getUsername());
+            target.setCreateTime(LocalDateTime.now());
+            target.setUpdateTime(target.getCreateTime());
+            target.setCreateBy(operatorId);
+            target.setUpdateBy(operatorId);
+            target.setDeleted(0);
+            if (attachmentMapper.insert(target) != 1) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "复制知识文章附件失败");
+            }
+            return attachmentConverter.toVO(target);
+        }).toList();
+        if (!copied.isEmpty()) {
+            auditLogService.record(operatorId, AUDIT_OPERATION_COPY, AUDIT_BIZ_TYPE, knowledgeArticleId,
+                    "从工单复制附件到知识文章：" + copied.size() + " 个", null, null);
+        }
+        return copied;
+    }
+
+    @Override
+    @Transactional
+    public int logicalDeleteBoundAttachments(String bizType, Long bizId, CurrentUser currentUser) {
+        Long operatorId = requireUserId(currentUser);
+        String normalizedBizType = resourceAccessService.normalizeBizType(bizType);
+        if (bizId == null || bizId <= 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "业务资源ID必须为正整数");
+        }
+        resourceAccessService.requireWriteAccess(normalizedBizType, bizId, currentUser);
+        int affected = attachmentMapper.logicalDeleteByBiz(normalizedBizType, bizId, operatorId);
+        if (affected > 0) {
+            auditLogService.record(operatorId, AUDIT_OPERATION_DELETE, AUDIT_BIZ_TYPE, bizId,
+                    "随业务删除关联附件：" + affected + " 个", null, null);
+        }
+        return affected;
     }
 
     @Override
@@ -265,8 +365,9 @@ public class AttachmentServiceImpl implements AttachmentService {
         if (attachmentMapper.lockTicket(ticketId) == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "工单不存在");
         }
-        if (attachmentMapper.countActiveByTicketScope(ticketId) >= MAX_FILES_PER_TICKET) {
-            throw new BusinessException(ErrorCode.STATE_CONFLICT, "单个工单最多上传10个附件");
+        int maxFiles = filePolicy.maxFilesPerTicket();
+        if (attachmentMapper.countActiveByTicketScope(ticketId) >= maxFiles) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "单个工单最多上传" + maxFiles + "个附件");
         }
     }
 

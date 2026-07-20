@@ -15,6 +15,8 @@ import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
 import com.opsdesk.common.security.CurrentUser;
+import com.opsdesk.system.service.UploadPolicyService;
+import com.opsdesk.system.vo.UploadPolicyVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,14 +60,20 @@ class AttachmentServiceImplTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private UploadPolicyService uploadPolicyService;
+
     private AttachmentServiceImpl attachmentService;
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(uploadPolicyService.detail()).thenReturn(new UploadPolicyVO(20, 10,
+                List.of("jpg", "jpeg", "png", "pdf", "docx", "xlsx", "txt", "log", "zip"),
+                List.of("jpg", "jpeg", "png", "txt", "log"), List.of("pdf", "docx", "xlsx", "zip")));
         attachmentService = new AttachmentServiceImpl(
                 attachmentMapper,
                 attachmentStorage,
-                new AttachmentFilePolicy(),
+                new AttachmentFilePolicy(uploadPolicyService),
                 resourceAccessService,
                 new AttachmentConverter(),
                 new SnowflakeIdGenerator(),
@@ -131,6 +139,66 @@ class AttachmentServiceImplTest {
         assertThat(result.get(0).previewType()).isEqualTo("TEXT");
         assertThat(result.get(0).downloadOnly()).isFalse();
         assertThat(result.get(0).downloadUrl()).isEqualTo("/api/files/500/download");
+    }
+
+    @Test
+    void bindTemporaryAttachmentsShouldRequireOwnedUnboundKnowledgeFiles() {
+        Attachment attachment = textAttachment();
+        attachment.setBizType("KNOWLEDGE");
+        attachment.setBizId(null);
+        attachment.setTempToken("knowledge_1234567890abcdef");
+        CurrentUser currentUser = user(10L, "AGENT");
+        when(resourceAccessService.normalizeBizType("KNOWLEDGE")).thenReturn("KNOWLEDGE");
+        when(resourceAccessService.requireWriteAccess("KNOWLEDGE", 200L, currentUser))
+                .thenReturn(new AttachmentResourceScope("KNOWLEDGE", 200L, null));
+        when(attachmentMapper.findTemporaryByIds("KNOWLEDGE", List.of(500L), 10L)).thenReturn(List.of(attachment));
+        when(attachmentMapper.bindTemporaryByIds("KNOWLEDGE", List.of(500L), 10L, 200L, 10L)).thenReturn(1);
+
+        var result = attachmentService.bindTemporaryAttachments("KNOWLEDGE", 200L, List.of("500"), currentUser);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).bizId()).isEqualTo("200");
+        assertThat(result.get(0).tempToken()).isNull();
+    }
+
+    @Test
+    void copyTicketAttachmentsShouldCreateIndependentKnowledgeAttachmentMetadata() {
+        Attachment source = textAttachment();
+        CurrentUser currentUser = user(10L, "AGENT");
+        when(resourceAccessService.requireReadAccess("TICKET", 100L, currentUser))
+                .thenReturn(new AttachmentResourceScope("TICKET", 100L, 100L));
+        when(resourceAccessService.requireWriteAccess("KNOWLEDGE", 200L, currentUser))
+                .thenReturn(new AttachmentResourceScope("KNOWLEDGE", 200L, null));
+        when(attachmentMapper.findByBiz("TICKET", 100L)).thenReturn(List.of(source));
+        when(attachmentMapper.insert(any(Attachment.class))).thenReturn(1);
+
+        var copied = attachmentService.copyTicketAttachmentsToKnowledge(100L, 200L, currentUser);
+
+        ArgumentCaptor<Attachment> captor = ArgumentCaptor.forClass(Attachment.class);
+        verify(attachmentMapper).insert(captor.capture());
+        assertThat(captor.getValue().getId()).isNotEqualTo(source.getId());
+        assertThat(captor.getValue().getBizType()).isEqualTo("KNOWLEDGE");
+        assertThat(captor.getValue().getBizId()).isEqualTo(200L);
+        assertThat(captor.getValue().getStoragePath()).isEqualTo(source.getStoragePath());
+        assertThat(captor.getValue().getUploaderId()).isEqualTo(10L);
+        assertThat(copied).hasSize(1);
+        verify(auditLogService).record(10L, "ATTACHMENT_COPY", "ATTACHMENT", 200L,
+                "从工单复制附件到知识文章：1 个", null, null);
+    }
+
+    @Test
+    void logicalDeleteBoundAttachmentsShouldHideAllFilesBeforeBusinessDeletion() {
+        CurrentUser currentUser = user(10L, "MANAGER");
+        when(resourceAccessService.normalizeBizType("KNOWLEDGE")).thenReturn("KNOWLEDGE");
+        when(resourceAccessService.requireWriteAccess("KNOWLEDGE", 200L, currentUser))
+                .thenReturn(new AttachmentResourceScope("KNOWLEDGE", 200L, null));
+        when(attachmentMapper.logicalDeleteByBiz("KNOWLEDGE", 200L, 10L)).thenReturn(2);
+
+        int affected = attachmentService.logicalDeleteBoundAttachments("KNOWLEDGE", 200L, currentUser);
+
+        assertThat(affected).isEqualTo(2);
+        verify(auditLogService).record(10L, "ATTACHMENT_DELETE", "ATTACHMENT", 200L,
+                "随业务删除关联附件：2 个", null, null);
     }
 
     @Test

@@ -18,6 +18,12 @@ public class Ticket {
     private String ticketNo;
     private String title;
     private String description;
+    /** 解决方案摘要：完成工单时写入，可供知识库草稿沉淀。 */
+    private String resolutionSummary;
+    /** 处理步骤：完成工单时写入的 Markdown 操作过程。 */
+    private String resolutionSteps;
+    /** 解决结果是否已验证：0 未验证，1 已验证。 */
+    private Integer resolutionVerified;
     private Long categoryId;
     private String priority;
     private String status;

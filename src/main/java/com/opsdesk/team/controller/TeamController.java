@@ -16,6 +16,7 @@ import com.opsdesk.team.dto.TeamUpdateRequest;
 import com.opsdesk.team.service.TeamService;
 import com.opsdesk.team.vo.TeamMemberVO;
 import com.opsdesk.team.vo.TeamVO;
+import com.opsdesk.team.vo.TeamCandidateUserVO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -48,6 +49,13 @@ public class TeamController {
             keyType = RateLimitKeyType.USER)
     public ApiResponse<PageResult<TeamVO>> search(@RequestBody(required = false) TeamSearchRequest request) {
         return ApiResponse.success(teamService.search(request));
+    }
+
+    @PostMapping("/managed/search")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ApiResponse<PageResult<TeamVO>> searchManaged(@RequestBody(required = false) TeamSearchRequest request,
+                                                         @AuthenticationPrincipal CurrentUser currentUser) {
+        return ApiResponse.success(teamService.searchManaged(request, currentUser));
     }
 
     @PostMapping("/create")
@@ -121,8 +129,16 @@ public class TeamController {
         return ApiResponse.success(teamService.searchMembers(id, request, currentUser));
     }
 
+    @PostMapping("/{id}/members/candidates/search")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ApiResponse<PageResult<TeamCandidateUserVO>> searchCandidates(@PathVariable String id,
+                                                                         @RequestBody(required = false) TeamMemberSearchRequest request,
+                                                                         @AuthenticationPrincipal CurrentUser currentUser) {
+        return ApiResponse.success(teamService.searchCandidates(id, request, currentUser));
+    }
+
     @PostMapping("/{id}/members/update")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
             windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
@@ -134,7 +150,7 @@ public class TeamController {
         return ApiResponse.success(teamService.updateMembers(
                 id,
                 request,
-                currentUser.getUserId(),
+                currentUser,
                 servletRequest.getRemoteAddr(),
                 servletRequest.getHeader("User-Agent")
         ));

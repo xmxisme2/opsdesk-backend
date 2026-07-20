@@ -61,6 +61,9 @@ public class TicketConverter {
                 ticket.getTicketNo(),
                 ticket.getTitle(),
                 ticket.getDescription(),
+                ticket.getResolutionSummary(),
+                ticket.getResolutionSteps(),
+                ticket.getResolutionVerified() != null && ticket.getResolutionVerified() == 1,
                 String.valueOf(ticket.getCategoryId()),
                 category == null ? null : category.getName(),
                 ticket.getPriority(),
@@ -122,6 +125,11 @@ public class TicketConverter {
                 format(category.getUpdateTime()),
                 children
         );
+    }
+
+    /** 分类写接口返回单节点时使用，统一保证 children 返回空数组而不是 null。 */
+    public TicketCategoryVO toCategoryVO(TicketCategory category, Team defaultTeam) {
+        return toCategoryVO(category, defaultTeam, List.of());
     }
 
     public TicketOperationLogVO toOperationLogVO(TicketOperationLog log, SysUser operator) {
