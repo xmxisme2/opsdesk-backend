@@ -81,6 +81,9 @@ class KnowledgeServiceImplTest {
     @Test
     void fromTicketCopiesDirectAttachmentsWhenRequested() {
         Ticket ticket = new Ticket(); ticket.setId(3L); ticket.setStatus("CLOSED"); ticket.setTitle("VPN 故障"); ticket.setDescription("无法连接");
+        ticket.setResolutionSummary("证书已过期");
+        ticket.setResolutionSteps("1. 更新证书\\n2. 重启客户端");
+        ticket.setResolutionVerified(1);
         KnowledgeArticleRow draft = article(9L, "DRAFT", 1L);
         when(ticketMapper.findById(3L)).thenReturn(ticket);
         when(articleMapper.findById(9L)).thenReturn(draft);
@@ -94,6 +97,11 @@ class KnowledgeServiceImplTest {
         service.fromTicket("3", new KnowledgeFromTicketRequest(), user("AGENT"), "ip", "ua");
 
         verify(attachmentService).copyTicketAttachmentsToKnowledge(eq(3L), eq(9L), any(CurrentUser.class));
+        ArgumentCaptor<KnowledgeArticle> articleCaptor = ArgumentCaptor.forClass(KnowledgeArticle.class);
+        verify(articleMapper).insert(articleCaptor.capture());
+        assertTrue(articleCaptor.getValue().getContent().contains("# 根因与解决方案\n\n证书已过期"));
+        assertTrue(articleCaptor.getValue().getContent().contains("# 处理步骤\n\n1. 更新证书"));
+        assertTrue(articleCaptor.getValue().getContent().contains("# 验证结果\n\n已验证解决"));
     }
 
     @Test

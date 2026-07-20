@@ -107,6 +107,9 @@ public class TicketServiceImpl implements TicketService {
     /** 单个标签最大长度：防止过长标签污染列表展示，外部传入超过会报参数错误。 */
     private static final int MAX_TAG_LENGTH = 30;
 
+    /** 解决方案摘要最大长度：用于工单详情和知识草稿的根因/结论概述。 */
+    private static final int MAX_RESOLUTION_SUMMARY_LENGTH = 1000;
+
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final TicketMapper ticketMapper;
@@ -425,11 +428,15 @@ public class TicketServiceImpl implements TicketService {
         String fromStatus = ticket.getStatus();
         TicketStatus targetStatus = ticketStateMachine.nextStatus(parseStatus(fromStatus), TicketAction.COMPLETE,
                 buildStateContext(ticket, currentUser));
+        CompletionResolution resolution = resolveCompletionResolution(request);
         ticket.setStatus(targetStatus.name());
+        ticket.setResolutionSummary(resolution.summary());
+        ticket.setResolutionSteps(resolution.steps());
+        ticket.setResolutionVerified(resolution.verified() ? 1 : 0);
         ticket.setUpdateBy(operatorId);
         updateTicket(ticket);
         recordLog(ticket, operationType(TicketAction.COMPLETE), fromStatus, ticket.getStatus(), operatorId,
-                contentOrDefault(request == null ? null : request.getCompleteRemark(), "提交处理完成"), requestIp, userAgent);
+                "解决方案：" + resolution.summary() + (resolution.verified() ? "；已验证" : "；待验证"), requestIp, userAgent);
         notifyTicketStatusChanged(ticket, operatorId, "工单已提交完成");
         return assembleTicketVO(ticket, currentUser);
     }
@@ -1004,8 +1011,32 @@ public class TicketServiceImpl implements TicketService {
         }
     }
 
+    /**
+     * 归一化完成动作的结构化解决方案。
+     *
+     * <p>旧客户端仅传 completeRemark 时，将其同时作为摘要和步骤，避免破坏已有接口；新版必须分别提供摘要和步骤。</p>
+     */
+    private CompletionResolution resolveCompletionResolution(TicketCompleteRequest request) {
+        String legacyRemark = request == null ? null : trimToNull(request.getCompleteRemark());
+        String summary = request == null ? null : trimToNull(request.getResolutionSummary());
+        String steps = request == null ? null : trimToNull(request.getResolutionSteps());
+        summary = summary == null ? legacyRemark : summary;
+        steps = steps == null ? legacyRemark : steps;
+        if (!StringUtils.hasText(summary) || !StringUtils.hasText(steps)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "请填写解决方案摘要和处理步骤");
+        }
+        if (summary.length() > MAX_RESOLUTION_SUMMARY_LENGTH) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "解决方案摘要不能超过1000个字符");
+        }
+        return new CompletionResolution(summary, steps, request != null && Boolean.TRUE.equals(request.getResolutionVerified()));
+    }
+
     private String contentOrDefault(String content, String defaultContent) {
         return StringUtils.hasText(content) ? content.trim() : defaultContent;
+    }
+
+    /** 完成动作的内部归一化结果，避免散落处理新旧请求字段的兼容逻辑。 */
+    private record CompletionResolution(String summary, String steps, boolean verified) {
     }
 
     private String trimToNull(String value) {

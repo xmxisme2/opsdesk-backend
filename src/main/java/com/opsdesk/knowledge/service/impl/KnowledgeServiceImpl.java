@@ -28,6 +28,9 @@ import com.opsdesk.knowledge.vo.KnowledgeCategoryVO;
 import com.opsdesk.knowledge.vo.KnowledgeTagVO;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.mapper.TicketMapper;
+import com.opsdesk.ticket.mapper.TicketOperationLogMapper;
+import com.opsdesk.ticket.entity.TicketOperationLog;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,12 +65,24 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private final SnowflakeIdGenerator idGenerator;
     private final AuditLogService auditLogService;
     private final AttachmentService attachmentService;
+    private final TicketOperationLogMapper ticketOperationLogMapper;
 
     public KnowledgeServiceImpl(KnowledgeArticleMapper articleMapper, KnowledgeCategoryMapper categoryMapper,
                                 KnowledgeTagMapper tagMapper, TicketMapper ticketMapper,
                                 TicketCommentMapper commentMapper, KnowledgeConverter converter,
                                 SnowflakeIdGenerator idGenerator, AuditLogService auditLogService,
                                 AttachmentService attachmentService) {
+        this(articleMapper, categoryMapper, tagMapper, ticketMapper, commentMapper, converter, idGenerator,
+                auditLogService, attachmentService, null);
+    }
+
+    /** Spring 注入完整依赖；操作日志仅用于兼容历史工单缺失结构化解决方案的情况。 */
+    @Autowired
+    public KnowledgeServiceImpl(KnowledgeArticleMapper articleMapper, KnowledgeCategoryMapper categoryMapper,
+                                KnowledgeTagMapper tagMapper, TicketMapper ticketMapper,
+                                TicketCommentMapper commentMapper, KnowledgeConverter converter,
+                                SnowflakeIdGenerator idGenerator, AuditLogService auditLogService,
+                                AttachmentService attachmentService, TicketOperationLogMapper ticketOperationLogMapper) {
         this.articleMapper = articleMapper;
         this.categoryMapper = categoryMapper;
         this.tagMapper = tagMapper;
@@ -77,6 +92,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         this.idGenerator = idGenerator;
         this.auditLogService = auditLogService;
         this.attachmentService = attachmentService;
+        this.ticketOperationLogMapper = ticketOperationLogMapper;
     }
 
     @Override
@@ -169,6 +185,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         mutation.setTitle(ticket.getTitle());
         mutation.setSummary("来源工单 " + (ticket.getTicketNo() == null ? sourceId : ticket.getTicketNo()));
         StringBuilder content = new StringBuilder("# 问题描述\n\n").append(ticket.getDescription());
+        appendResolution(content, ticket, sourceId);
         KnowledgeFromTicketRequest safe = request == null ? new KnowledgeFromTicketRequest() : request;
         if (!Boolean.FALSE.equals(safe.getIncludeComments())) {
             // 知识文章可能后续发布给全部用户，生成草稿时只沉淀公开评论，内部备注不得跨域复制。
@@ -195,6 +212,36 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         }
         audit(requireUserId(user), "KNOWLEDGE_FROM_TICKET", Long.valueOf(result.getId()), "从工单生成知识草稿", ip, userAgent);
         return result;
+    }
+
+    /** 将结构化结案数据写成稳定的知识文章章节；旧工单则回退到完成操作日志。 */
+    private void appendResolution(StringBuilder content, Ticket ticket, Long sourceId) {
+        if (StringUtils.hasText(ticket.getResolutionSummary()) || StringUtils.hasText(ticket.getResolutionSteps())) {
+            content.append("\n\n# 根因与解决方案\n\n")
+                    .append(StringUtils.hasText(ticket.getResolutionSummary()) ? ticket.getResolutionSummary() : "未填写");
+            content.append("\n\n# 处理步骤\n\n")
+                    .append(StringUtils.hasText(ticket.getResolutionSteps()) ? ticket.getResolutionSteps() : "未填写");
+            content.append("\n\n# 验证结果\n\n")
+                    .append(ticket.getResolutionVerified() != null && ticket.getResolutionVerified() == 1 ? "已验证解决" : "待验证");
+            return;
+        }
+        String legacyRemark = resolveLegacyCompleteRemark(sourceId);
+        if (StringUtils.hasText(legacyRemark)) {
+            content.append("\n\n# 解决方案（历史完成说明）\n\n").append(legacyRemark);
+        }
+    }
+
+    /** 读取历史完成操作记录，避免旧数据在生成知识草稿时丢失已有处理说明。 */
+    private String resolveLegacyCompleteRemark(Long ticketId) {
+        if (ticketOperationLogMapper == null) {
+            return null;
+        }
+        return ticketOperationLogMapper.searchByTicketId(ticketId).stream()
+                .filter(log -> "TICKET_COMPLETE".equals(log.getOperationType()))
+                .map(TicketOperationLog::getContent)
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(null);
     }
 
     @Override

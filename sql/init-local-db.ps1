@@ -57,6 +57,7 @@ if (-not $SeedOnly) {
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "04_migrate_attachment_temp_token.sql")
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "05_migrate_ticket_category_active_unique.sql")
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "06_migrate_knowledge_active_unique.sql")
+    Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "07_migrate_ticket_resolution.sql")
 }
 
 if (-not $SchemaOnly) {
