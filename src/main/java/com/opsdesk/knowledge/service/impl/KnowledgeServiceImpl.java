@@ -127,10 +127,11 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     public KnowledgeArticleVO create(KnowledgeArticleMutationRequest request, CurrentUser user, String ip, String userAgent) {
         requireMaintainer(user);
         Long operatorId = requireUserId(user);
+        String createStatus = resolveCreateStatus(request.getStatus(), user);
         KnowledgeArticle article = new KnowledgeArticle();
         article.setId(idGenerator.nextId());
         article.setAuthorId(operatorId);
-        article.setStatus(STATUS_DRAFT);
+        article.setStatus(createStatus);
         article.setViewCount(0L);
         article.setCreateBy(operatorId);
         applyArticle(article, request, operatorId, false);
@@ -139,6 +140,10 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         attachmentService.bindTemporaryAttachments(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE,
                 article.getId(), request.getAttachmentIds(), user);
         audit(operatorId, "KNOWLEDGE_CREATE", article.getId(), "创建知识库文章：" + article.getTitle(), ip, userAgent);
+        if (STATUS_PUBLISHED.equals(createStatus)) {
+            // 新建即发布也需要独立审计，保证与草稿后续发布的追溯口径一致。
+            audit(operatorId, "KNOWLEDGE_PUBLISH", article.getId(), "发布知识库文章：" + article.getTitle(), ip, userAgent);
+        }
         return toArticleVO(requireArticle(article.getId()), user);
     }
 
@@ -339,6 +344,17 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private Long requireUserId(CurrentUser user){if(user==null||user.getUserId()==null)throw new BusinessException(ErrorCode.UNAUTHORIZED,"请先登录");return user.getUserId();}
     private Long parseOptional(String value,String field){return StringUtils.hasText(value)?IdParser.parseRequired(value,field):null;}
     private String normalizeStatus(String value,String fallback){if(!StringUtils.hasText(value))return fallback;String status=value.trim().toUpperCase(Locale.ROOT);if(!ARTICLE_STATUSES.contains(status))throw new BusinessException(ErrorCode.PARAM_ERROR,"文章状态不合法");return status;}
+    /** 新建文章只允许保存草稿或直接发布；直接发布必须由负责人或管理员发起。 */
+    private String resolveCreateStatus(String value, CurrentUser user) {
+        String status = normalizeStatus(value, STATUS_DRAFT);
+        if (STATUS_OFFLINE.equals(status)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "新建文章不能直接设为已下线");
+        }
+        if (STATUS_PUBLISHED.equals(status)) {
+            requireManager(user);
+        }
+        return status;
+    }
     private String normalizeName(String value){String name=value.trim();if(name.isEmpty())throw new BusinessException(ErrorCode.PARAM_ERROR,"分类名称不能为空");return name;}
     private String normalizeTag(String value){String name=value.trim();if(name.isEmpty()||name.length()>64)throw new BusinessException(ErrorCode.PARAM_ERROR,"标签名称不合法");return name;}
     private KnowledgeTagVO toTagVO(KnowledgeTag tag){return new KnowledgeTagVO(String.valueOf(tag.getId()),tag.getName(),tag.getArticleCount()==null?0:tag.getArticleCount());}

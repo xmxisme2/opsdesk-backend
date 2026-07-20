@@ -8,6 +8,7 @@ import com.opsdesk.common.id.SnowflakeIdGenerator;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.knowledge.converter.KnowledgeConverter;
 import com.opsdesk.knowledge.dto.KnowledgeArticleSearchRequest;
+import com.opsdesk.knowledge.dto.KnowledgeArticleMutationRequest;
 import com.opsdesk.knowledge.dto.KnowledgeFromTicketRequest;
 import com.opsdesk.knowledge.entity.KnowledgeArticle;
 import com.opsdesk.knowledge.mapper.KnowledgeArticleMapper;
@@ -15,6 +16,7 @@ import com.opsdesk.knowledge.mapper.KnowledgeArticleRow;
 import com.opsdesk.knowledge.mapper.KnowledgeCategoryMapper;
 import com.opsdesk.knowledge.mapper.KnowledgeTagMapper;
 import com.opsdesk.knowledge.service.impl.KnowledgeServiceImpl;
+import com.opsdesk.knowledge.vo.KnowledgeArticleVO;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.mapper.TicketMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,6 +60,39 @@ class KnowledgeServiceImplTest {
         when(articleMapper.findById(2L)).thenReturn(row);
         BusinessException error = assertThrows(BusinessException.class, () -> service.detail("2", user("USER")));
         assertEquals(403001, error.getErrorCode().getCode());
+    }
+
+    @Test
+    void managerCanCreateAndPublishArticleInOneRequest() {
+        KnowledgeArticleRow published = article(9L, "PUBLISHED", 1L);
+        when(articleMapper.findById(9L)).thenReturn(published);
+        when(attachmentService.search(any(), any())).thenReturn(List.of());
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        when(idGenerator.nextId()).thenReturn(9L);
+        service = new KnowledgeServiceImpl(articleMapper, mock(KnowledgeCategoryMapper.class), mock(KnowledgeTagMapper.class),
+                ticketMapper, mock(TicketCommentMapper.class), new KnowledgeConverter(), idGenerator, mock(AuditLogService.class), attachmentService);
+        KnowledgeArticleMutationRequest request = new KnowledgeArticleMutationRequest();
+        request.setTitle("VPN 排障"); request.setContent("处理步骤"); request.setStatus("PUBLISHED");
+
+        KnowledgeArticleVO result = service.create(request, user("MANAGER"), "ip", "ua");
+
+        ArgumentCaptor<KnowledgeArticle> articleCaptor = ArgumentCaptor.forClass(KnowledgeArticle.class);
+        verify(articleMapper).insert(articleCaptor.capture());
+        assertEquals("PUBLISHED", articleCaptor.getValue().getStatus());
+        assertNotNull(articleCaptor.getValue().getPublishedTime());
+        assertEquals("PUBLISHED", result.getStatus());
+    }
+
+    @Test
+    void agentCannotCreateAndPublishArticle() {
+        KnowledgeArticleMutationRequest request = new KnowledgeArticleMutationRequest();
+        request.setTitle("VPN 排障"); request.setContent("处理步骤"); request.setStatus("PUBLISHED");
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> service.create(request, user("AGENT"), "ip", "ua"));
+
+        assertEquals(403001, error.getErrorCode().getCode());
+        verify(articleMapper, never()).insert(any(KnowledgeArticle.class));
     }
 
     @Test
