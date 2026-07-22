@@ -60,6 +60,8 @@ if (-not $SeedOnly) {
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "07_migrate_ticket_resolution.sql")
     # 邮件通知配置迁移：为既有库补齐开关和默认收件邮箱，重复执行保持幂等。
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "08_migrate_notification_email_config.sql")
+    # 工单分派通知改为展示处理组名称，修复仅分派团队时显示“待分派”的歧义。
+    Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "09_migrate_ticket_assignment_template.sql")
 }
 
 if (-not $SchemaOnly) {

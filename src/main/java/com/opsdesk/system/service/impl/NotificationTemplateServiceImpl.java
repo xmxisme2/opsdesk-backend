@@ -24,7 +24,7 @@ public class NotificationTemplateServiceImpl implements NotificationTemplateServ
     private static final Set<String> TYPES = Set.of("TICKET_ASSIGNED", "TICKET_COMMENTED", "TICKET_STATUS_CHANGED", "TICKET_OVERDUE", "TICKET_CLOSED");
     private static final Set<String> CHANNELS = Set.of("IN_APP", "EMAIL");
     private static final Map<String, List<String>> VARIABLES = Map.of(
-            "TICKET_ASSIGNED", List.of("ticketNo", "assignee", "operatorName"),
+            "TICKET_ASSIGNED", List.of("ticketNo", "teamName", "operatorName"),
             "TICKET_COMMENTED", List.of("ticketNo", "commenter"),
             "TICKET_STATUS_CHANGED", List.of("ticketNo", "status", "operatorName"),
             "TICKET_OVERDUE", List.of("ticketNo", "assignee"),
@@ -34,6 +34,7 @@ public class NotificationTemplateServiceImpl implements NotificationTemplateServ
     private static final Map<String, String> VARIABLE_DESCRIPTIONS = Map.of(
             "ticketNo", "工单编号",
             "assignee", "当前处理人姓名",
+            "teamName", "工单所属处理组名称",
             "operatorName", "执行本次分派或状态变更的操作人姓名",
             "commenter", "发表评论的用户姓名",
             "status", "变更后的工单状态中文名称"

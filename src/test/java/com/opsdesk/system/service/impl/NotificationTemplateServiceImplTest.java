@@ -17,13 +17,13 @@ class NotificationTemplateServiceImplTest {
         NotificationTemplateMapper mapper = mock(NotificationTemplateMapper.class);
         when(mapper.search(null, "IN_APP")).thenReturn(List.of(template()));
         var result = new NotificationTemplateServiceImpl(mapper, mock(AuditLogService.class)).search(new com.opsdesk.system.dto.NotificationTemplateSearchRequest(null, "in_app"));
-        assertThat(result.get(0).allowedVariables()).contains("ticketNo", "assignee", "operatorName");
+        assertThat(result.get(0).allowedVariables()).contains("ticketNo", "teamName", "operatorName");
         assertThat(result.get(0).variableDescriptions()).containsEntry("operatorName", "执行本次分派或状态变更的操作人姓名");
     }
     @Test void updateShouldValidateAndAudit() {
         NotificationTemplateMapper mapper = mock(NotificationTemplateMapper.class); AuditLogService audit = mock(AuditLogService.class);
         NotificationTemplate template = template(); when(mapper.findById(1L)).thenReturn(template); when(mapper.update(template)).thenReturn(1);
-        var result = new NotificationTemplateServiceImpl(mapper, audit).update("1", new NotificationTemplateUpdateRequest("已分派 {ticketNo}", "处理人 {assignee}", true), 9L, "ip", "ua");
+        var result = new NotificationTemplateServiceImpl(mapper, audit).update("1", new NotificationTemplateUpdateRequest("已分派 {ticketNo}", "处理组 {teamName}", true), 9L, "ip", "ua");
         assertThat(result.enabled()).isTrue(); verify(audit).record(eq(9L), eq("UPDATE"), eq("SYSTEM_CONFIG"), eq(1L), anyString(), eq("ip"), eq("ua"));
     }
     @Test void updateShouldRejectUnknownVariable() {
@@ -35,7 +35,7 @@ class NotificationTemplateServiceImplTest {
         NotificationTemplateMapper mapper = mock(NotificationTemplateMapper.class); NotificationTemplate template = template();
         when(mapper.findById(1L)).thenReturn(template); when(mapper.update(template)).thenReturn(1);
         var service = new NotificationTemplateServiceImpl(mapper, mock(AuditLogService.class));
-        assertThatCode(() -> service.update("1", new NotificationTemplateUpdateRequest("{operatorName} 已分派工单", "工单 {ticketNo} 已分派给 {assignee}", true), 9L, "", "")).doesNotThrowAnyException();
+        assertThatCode(() -> service.update("1", new NotificationTemplateUpdateRequest("{operatorName} 已分派工单", "工单 {ticketNo} 已分派给 {teamName}", true), 9L, "", "")).doesNotThrowAnyException();
     }
-    private NotificationTemplate template() { NotificationTemplate value = new NotificationTemplate(); value.setId(1L); value.setType("TICKET_ASSIGNED"); value.setChannel("IN_APP"); value.setTitleTemplate("工单已分派"); value.setContentTemplate("工单 {ticketNo} 已分派给 {assignee}"); value.setEnabled(1); return value; }
+    private NotificationTemplate template() { NotificationTemplate value = new NotificationTemplate(); value.setId(1L); value.setType("TICKET_ASSIGNED"); value.setChannel("IN_APP"); value.setTitleTemplate("工单已分派"); value.setContentTemplate("工单 {ticketNo} 已分派给 {teamName}"); value.setEnabled(1); return value; }
 }

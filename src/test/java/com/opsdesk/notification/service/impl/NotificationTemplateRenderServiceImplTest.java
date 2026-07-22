@@ -14,8 +14,8 @@ class NotificationTemplateRenderServiceImplTest {
     @Test void renderShouldReplaceAllVariables() {
         NotificationTemplateMapper mapper = mock(NotificationTemplateMapper.class);
         when(mapper.findByTypeAndChannel("TICKET_ASSIGNED", "IN_APP")).thenReturn(template(1));
-        var result = new NotificationTemplateRenderServiceImpl(mapper).render("TICKET_ASSIGNED", Map.of("operatorName", "管理员", "ticketNo", "TK001", "assignee", "小王"));
-        assertThat(result.orElseThrow().content()).isEqualTo("管理员 将工单 TK001 分派给 小王");
+        var result = new NotificationTemplateRenderServiceImpl(mapper).render("TICKET_ASSIGNED", Map.of("operatorName", "管理员", "ticketNo", "TK001", "teamName", "基础设施支持组"));
+        assertThat(result.orElseThrow().content()).isEqualTo("管理员 将工单 TK001 分派给 基础设施支持组");
     }
     @Test void renderShouldSkipDisabledTemplate() {
         NotificationTemplateMapper mapper = mock(NotificationTemplateMapper.class); when(mapper.findByTypeAndChannel(anyString(), eq("IN_APP"))).thenReturn(template(0));
@@ -25,5 +25,5 @@ class NotificationTemplateRenderServiceImplTest {
         NotificationTemplateMapper mapper = mock(NotificationTemplateMapper.class); when(mapper.findByTypeAndChannel(anyString(), eq("IN_APP"))).thenReturn(template(1));
         assertThatThrownBy(() -> new NotificationTemplateRenderServiceImpl(mapper).render("TICKET_ASSIGNED", Map.of("ticketNo", "TK001"))).isInstanceOf(BusinessException.class);
     }
-    private NotificationTemplate template(int enabled) { NotificationTemplate value = new NotificationTemplate(); value.setEnabled(enabled); value.setTitleTemplate("工单 {ticketNo}"); value.setContentTemplate("{operatorName} 将工单 {ticketNo} 分派给 {assignee}"); return value; }
+    private NotificationTemplate template(int enabled) { NotificationTemplate value = new NotificationTemplate(); value.setEnabled(enabled); value.setTitleTemplate("工单 {ticketNo}"); value.setContentTemplate("{operatorName} 将工单 {ticketNo} 分派给 {teamName}"); return value; }
 }

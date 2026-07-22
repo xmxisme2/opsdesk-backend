@@ -904,6 +904,7 @@ public class TicketServiceImpl implements TicketService {
         Map<String, String> variables = Map.of(
                 "ticketNo", displayTicketNo(ticket),
                 "assignee", userDisplayName(ticket.getAssigneeId(), "待分派"),
+                "teamName", teamDisplayName(ticket.getTeamId(), "未分配团队"),
                 "operatorName", userDisplayName(operatorId, "系统"),
                 "status", statusDisplayName(ticket.getStatus())
         );
@@ -916,6 +917,12 @@ public class TicketServiceImpl implements TicketService {
         SysUser user = sysUserMapper.findById(userId);
         if (user == null) return fallback;
         return StringUtils.hasText(user.getNickname()) ? user.getNickname() : user.getUsername();
+    }
+
+    /** 通知变量中的处理组名称仅来自有效团队，团队不存在或未分派时使用明确兜底文案。 */
+    private String teamDisplayName(Long teamId, String fallback) {
+        Team team = findTeam(teamId);
+        return team == null || !StringUtils.hasText(team.getName()) ? fallback : team.getName();
     }
 
     /** 将状态编码转换为通知用户可理解的中文状态名称。 */

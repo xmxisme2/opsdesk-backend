@@ -269,7 +269,7 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO notification_template (id, type, channel, title_template, content_template, enabled, create_by, update_by)
 VALUES
-  (1, 'TICKET_ASSIGNED', 'IN_APP', '工单已分派', '{operatorName} 将工单 {ticketNo} 分派给 {assignee}，请及时处理。', 1, NULL, NULL),
+  (1, 'TICKET_ASSIGNED', 'IN_APP', '工单已分派', '{operatorName} 将工单 {ticketNo} 分派给 {teamName}，请及时处理。', 1, NULL, NULL),
   (2, 'TICKET_COMMENTED', 'IN_APP', '工单有新评论', '工单 {ticketNo} 收到新评论，请查看。', 1, NULL, NULL),
   (3, 'TICKET_STATUS_CHANGED', 'IN_APP', '工单状态已变更', '{operatorName} 将工单 {ticketNo} 状态变更为 {status}。', 1, NULL, NULL),
   (4, 'TICKET_OVERDUE', 'IN_APP', '工单已超时', '工单 {ticketNo} 已超时，请尽快跟进。', 1, NULL, NULL),
