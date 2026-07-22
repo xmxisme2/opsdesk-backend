@@ -14,6 +14,7 @@ import com.opsdesk.notification.entity.Notification;
 import com.opsdesk.notification.mapper.NotificationMapper;
 import com.opsdesk.notification.service.NotificationService;
 import com.opsdesk.notification.service.NotificationTemplateRenderService;
+import com.opsdesk.notification.service.EmailNotificationSender;
 import com.opsdesk.notification.model.RenderedNotification;
 import com.opsdesk.notification.vo.NotificationReadAllVO;
 import com.opsdesk.notification.vo.NotificationUnreadCountVO;
@@ -62,30 +63,32 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationConverter notificationConverter;
     private final SnowflakeIdGenerator idGenerator;
     private final NotificationTemplateRenderService templateRenderService;
+    private final EmailNotificationSender emailNotificationSender;
 
     @Autowired
     public NotificationServiceImpl(NotificationMapper notificationMapper,
                                    StringRedisTemplate stringRedisTemplate,
-                                   NotificationTemplateRenderService templateRenderService) {
-        this(notificationMapper, stringRedisTemplate, new NotificationConverter(), new SnowflakeIdGenerator(), templateRenderService);
+                                   NotificationTemplateRenderService templateRenderService,
+                                   EmailNotificationSender emailNotificationSender) {
+        this(notificationMapper, stringRedisTemplate, new NotificationConverter(), new SnowflakeIdGenerator(), templateRenderService, emailNotificationSender);
     }
 
     /** 单元测试兼容构造器；生产环境由带模板渲染服务的构造器注入。 */
     public NotificationServiceImpl(NotificationMapper notificationMapper, StringRedisTemplate stringRedisTemplate) {
-        this(notificationMapper, stringRedisTemplate, new NotificationConverter(), new SnowflakeIdGenerator(), null);
+        this(notificationMapper, stringRedisTemplate, new NotificationConverter(), new SnowflakeIdGenerator(), null, null);
     }
 
     public NotificationServiceImpl(NotificationMapper notificationMapper,
                                    StringRedisTemplate stringRedisTemplate,
                                    NotificationConverter notificationConverter) {
-        this(notificationMapper, stringRedisTemplate, notificationConverter, new SnowflakeIdGenerator(), null);
+        this(notificationMapper, stringRedisTemplate, notificationConverter, new SnowflakeIdGenerator(), null, null);
     }
 
     public NotificationServiceImpl(NotificationMapper notificationMapper,
                                    StringRedisTemplate stringRedisTemplate,
                                    NotificationConverter notificationConverter,
                                    SnowflakeIdGenerator idGenerator) {
-        this(notificationMapper, stringRedisTemplate, notificationConverter, idGenerator, null);
+        this(notificationMapper, stringRedisTemplate, notificationConverter, idGenerator, null, null);
     }
 
     public NotificationServiceImpl(NotificationMapper notificationMapper,
@@ -93,11 +96,22 @@ public class NotificationServiceImpl implements NotificationService {
                                    NotificationConverter notificationConverter,
                                    SnowflakeIdGenerator idGenerator,
                                    NotificationTemplateRenderService templateRenderService) {
+        this(notificationMapper, stringRedisTemplate, notificationConverter, idGenerator, templateRenderService, null);
+    }
+
+    /** 完整构造器供集成测试注入邮件发送器，邮件投递在站内通知写入成功后旁路执行。 */
+    public NotificationServiceImpl(NotificationMapper notificationMapper,
+                                   StringRedisTemplate stringRedisTemplate,
+                                   NotificationConverter notificationConverter,
+                                   SnowflakeIdGenerator idGenerator,
+                                   NotificationTemplateRenderService templateRenderService,
+                                   EmailNotificationSender emailNotificationSender) {
         this.notificationMapper = notificationMapper;
         this.stringRedisTemplate = stringRedisTemplate;
         this.notificationConverter = notificationConverter;
         this.idGenerator = idGenerator;
         this.templateRenderService = templateRenderService;
+        this.emailNotificationSender = emailNotificationSender;
     }
 
     @Override
@@ -188,6 +202,9 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setDeleted(0);
         notificationMapper.insert(notification);
         stringRedisTemplate.delete(unreadKey(receiverId));
+        if (emailNotificationSender != null) {
+            emailNotificationSender.send(notification);
+        }
     }
 
     @Override

@@ -26,6 +26,9 @@ public interface UserManagementService {
 
     UserVO updateStatus(String id, UserStatusUpdateRequest request, Long operatorId, String requestIp, String userAgent);
 
+    /** 管理员解除系统风控导致的账号锁定，并清理该账号的登录失败记录。 */
+    UserVO unlock(String id, Long operatorId, String requestIp, String userAgent);
+
     void delete(String id, Long operatorId, String requestIp, String userAgent);
 
     UserResetPasswordVO resetPassword(String id,

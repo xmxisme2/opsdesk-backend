@@ -13,6 +13,7 @@ import com.opsdesk.auth.service.CaptchaService;
 import com.opsdesk.auth.service.TokenService;
 import com.opsdesk.auth.service.SmsVerificationService;
 import com.opsdesk.auth.service.SmsCooldownService;
+import com.opsdesk.auth.service.LoginFailureLockService;
 import com.opsdesk.auth.vo.KickoutOthersVO;
 import com.opsdesk.auth.vo.LoginResultVO;
 import com.opsdesk.auth.vo.SmsCodeSendVO;
@@ -49,6 +50,9 @@ public class AuthServiceImpl implements AuthService {
     /** 用户正常状态编码：只有 ACTIVE 账号允许登录和继续访问业务接口。 */
     private static final String STATUS_ACTIVE = "ACTIVE";
 
+    /** 账号锁定状态：密码连续失败达到阈值后写入，仅管理员可通过用户管理解除。 */
+    private static final String STATUS_LOCKED = "LOCKED";
+
     /** 用户审计业务类型：注册、登录、退出、改密等用户操作统一归入 USER。 */
     private static final String BIZ_TYPE_USER = "USER";
 
@@ -65,6 +69,7 @@ public class AuthServiceImpl implements AuthService {
     private final SmsVerificationService smsVerificationService;
     private final SmsCooldownService smsCooldownService;
     private final SmsProperties smsProperties;
+    private final LoginFailureLockService loginFailureLockService;
 
     public AuthServiceImpl(SysUserMapper sysUserMapper,
                            UserRoleMapper userRoleMapper,
@@ -78,7 +83,8 @@ public class AuthServiceImpl implements AuthService {
                            AuditLogService auditLogService,
                            SmsVerificationService smsVerificationService,
                            SmsCooldownService smsCooldownService,
-                           SmsProperties smsProperties) {
+                           SmsProperties smsProperties,
+                           LoginFailureLockService loginFailureLockService) {
         this.sysUserMapper = sysUserMapper;
         this.userRoleMapper = userRoleMapper;
         this.departmentMapper = departmentMapper;
@@ -92,6 +98,7 @@ public class AuthServiceImpl implements AuthService {
         this.smsVerificationService = smsVerificationService;
         this.smsCooldownService = smsCooldownService;
         this.smsProperties = smsProperties;
+        this.loginFailureLockService = loginFailureLockService;
     }
 
     @Override
@@ -141,6 +148,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResultVO login(LoginRequest request, String requestIp, String userAgent) {
+        if (loginFailureLockService.isIpLocked(requestIp)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "当前网络登录失败次数过多，请 15 分钟后再试");
+        }
         SysUser user = sysUserMapper.findByPhone(request.getPhone());
         if ("SMS".equalsIgnoreCase(request.getCaptchaType())) {
             validateSmsCode(request.getPhone(), request.getCaptchaCode(), "login");
@@ -153,6 +163,14 @@ public class AuthServiceImpl implements AuthService {
             }
             captchaService.validate(request.getCaptchaId(), request.getCaptchaCode());
             if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+                boolean shouldLockAccount = loginFailureLockService.recordPasswordFailure(request.getPhone(), requestIp);
+                auditLogService.record(user == null ? null : user.getId(), "USER_LOGIN_FAILED", BIZ_TYPE_USER,
+                        user == null ? null : user.getId(), "用户密码登录失败", requestIp, userAgent);
+                if (shouldLockAccount && user != null && STATUS_ACTIVE.equals(user.getStatus())) {
+                    sysUserMapper.updateStatus(user.getId(), STATUS_LOCKED, user.getId());
+                    auditLogService.record(user.getId(), "USER_LOGIN_LOCKED", BIZ_TYPE_USER, user.getId(),
+                            "用户连续 5 次密码登录失败，系统自动锁定账号", requestIp, userAgent);
+                }
                 throw new BusinessException(ErrorCode.PARAM_ERROR, "手机号或密码错误");
             }
         } else {
@@ -161,6 +179,9 @@ public class AuthServiceImpl implements AuthService {
         if (!STATUS_ACTIVE.equals(user.getStatus())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "账号已停用或锁定");
         }
+
+        // 密码和短信两种登录方式成功后都清理连续失败计数，保证“连续失败”按最近成功登录重置。
+        loginFailureLockService.clearFailures(request.getPhone(), requestIp);
 
         TokenPair tokenPair = tokenService.issueTokenPair(user.getId(), request.isRememberMe());
         UserVO userVO = userContextService.loadUserVO(user.getId());

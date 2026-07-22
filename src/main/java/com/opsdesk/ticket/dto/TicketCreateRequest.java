@@ -30,7 +30,7 @@ public class TicketCreateRequest {
     private String dueTime;
     private List<String> tags;
 
-    /** 附件 ID 集合：为后续附件模块预留，当前工单首版仅保留契约字段，不在本服务内绑定附件。 */
+    /** 临时附件 ID：工单创建成功后由服务层在同一事务中完成绑定。 */
     private List<String> attachmentIds;
 
     private Boolean submitNow = false;

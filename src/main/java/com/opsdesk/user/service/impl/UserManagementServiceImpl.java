@@ -2,6 +2,7 @@ package com.opsdesk.user.service.impl;
 
 import com.opsdesk.audit.service.AuditLogService;
 import com.opsdesk.auth.service.TokenService;
+import com.opsdesk.auth.service.LoginFailureLockService;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
@@ -77,6 +78,9 @@ public class UserManagementServiceImpl implements UserManagementService {
     /** 启停用户审计操作类型：管理员变更账号状态时写入 audit_log，不允许外部传入。 */
     private static final String OPERATION_USER_STATUS_UPDATE = "USER_STATUS_UPDATE";
 
+    /** 解除账号锁定审计操作类型：管理员恢复被风控锁定的账号时写入，外部不可传入。 */
+    private static final String OPERATION_USER_UNLOCK = "USER_UNLOCK";
+
     /** 删除用户审计操作类型：管理员逻辑删除账号时写入 audit_log，不允许外部传入。 */
     private static final String OPERATION_USER_DELETE = "USER_DELETE";
 
@@ -115,6 +119,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private final PasswordEncoder passwordEncoder;
     private final SnowflakeIdGenerator idGenerator;
     private final AuditLogService auditLogService;
+    private final LoginFailureLockService loginFailureLockService;
 
     public UserManagementServiceImpl(SysUserMapper sysUserMapper,
                                      UserRoleMapper userRoleMapper,
@@ -126,7 +131,8 @@ public class UserManagementServiceImpl implements UserManagementService {
                                      TokenService tokenService,
                                      PasswordEncoder passwordEncoder,
                                      SnowflakeIdGenerator idGenerator,
-                                     AuditLogService auditLogService) {
+                                     AuditLogService auditLogService,
+                                     LoginFailureLockService loginFailureLockService) {
         this.sysUserMapper = sysUserMapper;
         this.userRoleMapper = userRoleMapper;
         this.departmentMapper = departmentMapper;
@@ -138,6 +144,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         this.passwordEncoder = passwordEncoder;
         this.idGenerator = idGenerator;
         this.auditLogService = auditLogService;
+        this.loginFailureLockService = loginFailureLockService;
     }
 
     @Override
@@ -262,6 +269,24 @@ public class UserManagementServiceImpl implements UserManagementService {
         permissionCacheService.evictUserPermission(userId);
         auditLogService.record(operatorId, OPERATION_USER_STATUS_UPDATE, BIZ_TYPE_USER, userId,
                 buildStatusAuditContent(user, status, request.getReason()), requestIp, userAgent);
+        return detail(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public UserVO unlock(String id, Long operatorId, String requestIp, String userAgent) {
+        Long userId = IdParser.parseRequired(id, "用户ID");
+        SysUser user = loadUser(userId);
+        if (!STATUS_LOCKED.equals(user.getStatus())) {
+            throw new BusinessException(ErrorCode.STATE_CONFLICT, "仅锁定状态的账号可以解除锁定");
+        }
+        if (sysUserMapper.updateStatus(userId, STATUS_ACTIVE, operatorId) == 0) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
+        }
+        loginFailureLockService.clearAccountFailures(user.getPhone());
+        permissionCacheService.evictUserPermission(userId);
+        auditLogService.record(operatorId, OPERATION_USER_UNLOCK, BIZ_TYPE_USER, userId,
+                "管理员解除账号锁定：" + user.getUsername(), requestIp, userAgent);
         return detail(id);
     }
 

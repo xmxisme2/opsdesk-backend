@@ -292,7 +292,9 @@ VALUES
   (8, 'priority.LOW', '{"name":"低","sort":10,"color":"#0D8052","enabled":true}', 'PRIORITY', '低优先级展示配置', 1, 0, NULL, NULL),
   (9, 'priority.MEDIUM', '{"name":"中","sort":20,"color":"#1252AD","enabled":true}', 'PRIORITY', '中优先级展示配置，系统默认优先级必须启用', 1, 0, NULL, NULL),
   (10, 'priority.HIGH', '{"name":"高","sort":30,"color":"#BA630F","enabled":true}', 'PRIORITY', '高优先级展示配置', 1, 0, NULL, NULL),
-  (11, 'priority.URGENT', '{"name":"紧急","sort":40,"color":"#C71F24","enabled":true}', 'PRIORITY', '紧急优先级展示配置', 1, 0, NULL, NULL)
+  (11, 'priority.URGENT', '{"name":"紧急","sort":40,"color":"#C71F24","enabled":true}', 'PRIORITY', '紧急优先级展示配置', 1, 0, NULL, NULL),
+  (12, 'notification.email.enabled', 'false', 'NOTIFICATION', '邮件通知开关；开启后将所有通知投递至默认邮箱', 1, 0, NULL, NULL),
+  (13, 'notification.email.default_recipient', 'xmxisme@gmail.com', 'NOTIFICATION', '邮件通知开启时使用的默认收件邮箱', 1, 0, NULL, NULL)
 ON DUPLICATE KEY UPDATE
   config_value = VALUES(config_value),
   description = VALUES(description),

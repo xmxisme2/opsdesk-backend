@@ -8,6 +8,7 @@ import com.opsdesk.notification.dto.NotificationReadAllRequest;
 import com.opsdesk.notification.dto.NotificationSearchRequest;
 import com.opsdesk.notification.entity.Notification;
 import com.opsdesk.notification.mapper.NotificationMapper;
+import com.opsdesk.notification.service.EmailNotificationSender;
 import com.opsdesk.notification.vo.NotificationUnreadCountVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,11 +44,16 @@ class NotificationServiceImplTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private EmailNotificationSender emailNotificationSender;
+
     private NotificationServiceImpl notificationService;
 
     @BeforeEach
     void setUp() {
-        notificationService = new NotificationServiceImpl(notificationMapper, stringRedisTemplate);
+        notificationService = new NotificationServiceImpl(notificationMapper, stringRedisTemplate,
+                new com.opsdesk.notification.converter.NotificationConverter(),
+                new com.opsdesk.common.id.SnowflakeIdGenerator(), null, emailNotificationSender);
     }
 
     @Test
@@ -107,6 +113,7 @@ class NotificationServiceImplTest {
         assertThat(notificationCaptor.getValue().getBizId()).isEqualTo(200L);
         assertThat(notificationCaptor.getValue().getReadStatus()).isZero();
         verify(stringRedisTemplate).delete("notification:unread:10");
+        verify(emailNotificationSender).send(notificationCaptor.getValue());
     }
 
     private Notification notification(Long id, Long receiverId) {

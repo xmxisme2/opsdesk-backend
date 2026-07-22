@@ -58,6 +58,8 @@ if (-not $SeedOnly) {
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "05_migrate_ticket_category_active_unique.sql")
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "06_migrate_knowledge_active_unique.sql")
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "07_migrate_ticket_resolution.sql")
+    # 邮件通知配置迁移：为既有库补齐开关和默认收件邮箱，重复执行保持幂等。
+    Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "08_migrate_notification_email_config.sql")
 }
 
 if (-not $SchemaOnly) {

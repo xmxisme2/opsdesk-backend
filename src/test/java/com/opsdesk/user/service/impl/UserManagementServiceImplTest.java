@@ -2,6 +2,7 @@ package com.opsdesk.user.service.impl;
 
 import com.opsdesk.audit.service.AuditLogService;
 import com.opsdesk.auth.service.TokenService;
+import com.opsdesk.auth.service.LoginFailureLockService;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
@@ -31,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.util.List;
 
 /**
  * 用户管理服务单元测试。
@@ -64,6 +66,9 @@ class UserManagementServiceImplTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private LoginFailureLockService loginFailureLockService;
+
     private BCryptPasswordEncoder passwordEncoder;
     private UserManagementServiceImpl userManagementService;
 
@@ -81,7 +86,8 @@ class UserManagementServiceImplTest {
                 tokenService,
                 passwordEncoder,
                 new SnowflakeIdGenerator(),
-                auditLogService
+                auditLogService,
+                loginFailureLockService
         );
     }
 
@@ -151,5 +157,24 @@ class UserManagementServiceImplTest {
         verify(sysUserMapper).updatePassword(eq(2L), passwordHashCaptor.capture(), eq(1L));
         assertThat(passwordEncoder.matches(result.temporaryPassword(), passwordHashCaptor.getValue())).isTrue();
         verify(tokenService).invalidateAllRefreshSessions(2L);
+    }
+
+    @Test
+    void unlockShouldRestoreLockedAccountAndClearLoginFailures() {
+        SysUser user = new SysUser();
+        user.setId(2L);
+        user.setPhone("13900000000");
+        user.setUsername("zhangsan");
+        user.setStatus("LOCKED");
+        when(sysUserMapper.findById(2L)).thenReturn(user);
+        when(sysUserMapper.updateStatus(2L, "ACTIVE", 1L)).thenReturn(1);
+        when(roleMapper.findEnabledByUserId(2L)).thenReturn(List.of());
+        when(permissionMapper.findEnabledByUserId(2L)).thenReturn(List.of());
+
+        userManagementService.unlock("2", 1L, "127.0.0.1", "JUnit");
+
+        verify(loginFailureLockService).clearAccountFailures("13900000000");
+        verify(auditLogService).record(1L, "USER_UNLOCK", "USER", 2L,
+                "管理员解除账号锁定：zhangsan", "127.0.0.1", "JUnit");
     }
 }

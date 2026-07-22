@@ -106,6 +106,23 @@ public class UserManagementController {
         ));
     }
 
+    /** 管理员解除系统自动锁定的账号，失败计数由服务层同步清理。 */
+    @PostMapping("/{id}/unlock")
+    @Idempotent
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
+    public ApiResponse<UserVO> unlock(@PathVariable String id,
+                                      @AuthenticationPrincipal CurrentUser currentUser,
+                                      HttpServletRequest servletRequest) {
+        return ApiResponse.success(userManagementService.unlock(
+                id,
+                currentUser.getUserId(),
+                servletRequest.getRemoteAddr(),
+                servletRequest.getHeader("User-Agent")
+        ));
+    }
+
     @PostMapping("/{id}/delete")
     @Idempotent
     @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,

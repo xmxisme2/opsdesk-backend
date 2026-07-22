@@ -3,12 +3,14 @@ package com.opsdesk.ticket.service.impl;
 import com.opsdesk.attachment.converter.AttachmentConverter;
 import com.opsdesk.attachment.entity.Attachment;
 import com.opsdesk.attachment.mapper.AttachmentMapper;
+import com.opsdesk.attachment.service.AttachmentService;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
 import com.opsdesk.common.security.CurrentUser;
 import com.opsdesk.team.mapper.TeamMemberMapper;
 import com.opsdesk.ticket.dto.TicketAssignRequest;
+import com.opsdesk.ticket.dto.TicketCompleteRequest;
 import com.opsdesk.ticket.dto.TicketCreateRequest;
 import com.opsdesk.ticket.converter.TicketConverter;
 import com.opsdesk.ticket.dto.TicketReasonRequest;
@@ -78,6 +80,9 @@ class TicketServiceImplTest {
     @Mock
     private AttachmentMapper attachmentMapper;
 
+    @Mock
+    private AttachmentService attachmentService;
+
     private TicketServiceImpl ticketService;
 
     @BeforeEach
@@ -95,7 +100,10 @@ class TicketServiceImplTest {
                 null,
                 new TicketConverter(),
                 attachmentMapper,
-                new AttachmentConverter()
+                new AttachmentConverter(),
+                attachmentService,
+                null,
+                null
         );
     }
 
@@ -181,6 +189,36 @@ class TicketServiceImplTest {
         var order = org.mockito.Mockito.inOrder(ticketCategoryMapper, ticketMapper);
         order.verify(ticketCategoryMapper).findByIdForUpdate(1L);
         order.verify(ticketMapper).update(any(Ticket.class));
+    }
+
+    @Test
+    void createShouldBindSubmittedTemporaryAttachments() {
+        when(ticketCategoryMapper.findByIdForUpdate(1L)).thenReturn(category());
+        TicketCreateRequest request = createRequest(false);
+        request.setAttachmentIds(List.of("501", "502"));
+
+        ticketService.create(request, user(10L, "USER"), "127.0.0.1", "JUnit");
+
+        verify(attachmentService).bindTemporaryAttachments(org.mockito.ArgumentMatchers.eq("TICKET"), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.eq(List.of("501", "502")), org.mockito.ArgumentMatchers.any(CurrentUser.class));
+    }
+
+    @Test
+    void completeShouldBindSubmittedTemporaryAttachments() {
+        Ticket ticket = pendingProcessTicket(10L, 10L);
+        ticket.setStatus("PROCESSING");
+        when(ticketMapper.findById(100L)).thenReturn(ticket);
+        when(ticketMapper.update(any(Ticket.class))).thenReturn(1);
+        TicketCompleteRequest request = new TicketCompleteRequest();
+        request.setResolutionSummary("已恢复服务");
+        request.setResolutionSteps("重启服务并验证访问");
+        request.setResolutionVerified(true);
+        request.setAttachmentIds(List.of("503"));
+
+        ticketService.complete("100", request, user(10L, "AGENT"), "127.0.0.1", "JUnit");
+
+        verify(attachmentService).bindTemporaryAttachments(org.mockito.ArgumentMatchers.eq("TICKET"), org.mockito.ArgumentMatchers.eq(100L),
+                org.mockito.ArgumentMatchers.eq(List.of("503")), org.mockito.ArgumentMatchers.any(CurrentUser.class));
     }
 
     @Test

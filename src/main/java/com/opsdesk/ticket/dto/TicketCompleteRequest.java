@@ -25,6 +25,6 @@ public class TicketCompleteRequest {
     /** 是否已验证解决结果：由处理人显式确认，外部可传 true 或 false。 */
     private Boolean resolutionVerified;
 
-    /** 完成附件 ID：当前首版暂不绑定附件，保留契约兼容字段。 */
+    /** 临时附件 ID：完成工单时一并绑定为工单附件。 */
     private List<String> attachmentIds;
 }

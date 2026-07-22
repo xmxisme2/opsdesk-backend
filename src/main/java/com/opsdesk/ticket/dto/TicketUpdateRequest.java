@@ -30,6 +30,6 @@ public class TicketUpdateRequest {
     private String dueTime;
     private List<String> tags;
 
-    /** 附件 ID 集合：为后续附件模块预留，当前只保持 API 兼容。 */
+    /** 临时附件 ID：仅绑定本次编辑草稿新增的附件。 */
     private List<String> attachmentIds;
 }

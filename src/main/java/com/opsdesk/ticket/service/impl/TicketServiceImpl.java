@@ -4,6 +4,7 @@ import com.opsdesk.attachment.converter.AttachmentConverter;
 import com.opsdesk.attachment.entity.Attachment;
 import com.opsdesk.attachment.mapper.AttachmentMapper;
 import com.opsdesk.attachment.service.AttachmentResourceAccessService;
+import com.opsdesk.attachment.service.AttachmentService;
 import com.opsdesk.attachment.vo.AttachmentVO;
 import com.opsdesk.audit.service.AuditLogService;
 import com.opsdesk.common.exception.BusinessException;
@@ -147,6 +148,8 @@ public class TicketServiceImpl implements TicketService {
     private final TicketConverter ticketConverter;
     private final AttachmentMapper attachmentMapper;
     private final AttachmentConverter attachmentConverter;
+    /** 附件服务：创建草稿、编辑草稿和提交完成时绑定当前用户的临时附件，避免出现孤立业务附件。 */
+    private final AttachmentService attachmentService;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
 
@@ -161,7 +164,7 @@ public class TicketServiceImpl implements TicketService {
                              TicketStateMachine ticketStateMachine) {
         this(ticketMapper, ticketCategoryMapper, ticketOperationLogMapper, ticketWatchMapper, teamMemberMapper,
                 sysUserMapper, idGenerator, ticketNoGenerator, ticketStateMachine, null, new TicketConverter(),
-                null, new AttachmentConverter(), null, null);
+                null, new AttachmentConverter(), null, null, null);
     }
 
     public TicketServiceImpl(TicketMapper ticketMapper,
@@ -179,7 +182,7 @@ public class TicketServiceImpl implements TicketService {
                              AttachmentConverter attachmentConverter) {
         this(ticketMapper, ticketCategoryMapper, ticketOperationLogMapper, ticketWatchMapper, teamMemberMapper,
                 sysUserMapper, idGenerator, ticketNoGenerator, ticketStateMachine, teamMapper, ticketConverter,
-                attachmentMapper, attachmentConverter, null, null);
+                attachmentMapper, attachmentConverter, null, null, null);
     }
 
     @Autowired
@@ -196,6 +199,7 @@ public class TicketServiceImpl implements TicketService {
                              TicketConverter ticketConverter,
                              AttachmentMapper attachmentMapper,
                              AttachmentConverter attachmentConverter,
+                             AttachmentService attachmentService,
                              NotificationService notificationService,
                              AuditLogService auditLogService) {
         this.ticketMapper = ticketMapper;
@@ -211,6 +215,7 @@ public class TicketServiceImpl implements TicketService {
         this.ticketConverter = ticketConverter;
         this.attachmentMapper = attachmentMapper;
         this.attachmentConverter = attachmentConverter;
+        this.attachmentService = attachmentService;
         this.notificationService = notificationService;
         this.auditLogService = auditLogService;
     }
@@ -245,6 +250,7 @@ public class TicketServiceImpl implements TicketService {
         }
 
         ticketMapper.insert(ticket);
+        bindTemporaryTicketAttachments(ticket.getId(), request.getAttachmentIds(), currentUser);
         recordLog(ticket, OPERATION_TICKET_CREATE, null, ticket.getStatus(), operatorId,
                 "创建工单草稿", requestIp, userAgent);
         if (Boolean.TRUE.equals(request.getSubmitNow())) {
@@ -278,6 +284,7 @@ public class TicketServiceImpl implements TicketService {
         ticket.setTags(normalizeTags(request.getTags()));
         ticket.setUpdateBy(operatorId);
         updateTicket(ticket);
+        bindTemporaryTicketAttachments(ticket.getId(), request.getAttachmentIds(), currentUser);
         recordLog(ticket, OPERATION_TICKET_UPDATE, fromStatus, ticket.getStatus(), operatorId,
                 "编辑工单草稿", requestIp, userAgent);
         return assembleTicketVO(ticket, currentUser);
@@ -498,6 +505,7 @@ public class TicketServiceImpl implements TicketService {
         ticket.setResolutionVerified(resolution.verified() ? 1 : 0);
         ticket.setUpdateBy(operatorId);
         updateTicket(ticket);
+        bindTemporaryTicketAttachments(ticket.getId(), request == null ? null : request.getAttachmentIds(), currentUser);
         recordLog(ticket, operationType(TicketAction.COMPLETE), fromStatus, ticket.getStatus(), operatorId,
                 "解决方案：" + resolution.summary() + (resolution.verified() ? "；已验证" : "；待验证"), requestIp, userAgent);
         notifyTicketStatusChanged(ticket, operatorId, "工单已提交完成");
@@ -967,6 +975,17 @@ public class TicketServiceImpl implements TicketService {
         return attachments.stream()
                 .map(attachmentConverter::toVO)
                 .toList();
+    }
+
+    /**
+     * 仅绑定本次请求显式携带的临时附件；附件服务会复核上传人、临时状态及工单访问权限。
+     */
+    private void bindTemporaryTicketAttachments(Long ticketId, List<String> attachmentIds, CurrentUser currentUser) {
+        if (attachmentService == null || attachmentIds == null || attachmentIds.isEmpty()) {
+            return;
+        }
+        attachmentService.bindTemporaryAttachments(AttachmentResourceAccessService.BIZ_TYPE_TICKET,
+                ticketId, attachmentIds, currentUser);
     }
 
     private void updateTicket(Ticket ticket) {
