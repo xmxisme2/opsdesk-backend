@@ -76,6 +76,13 @@
             <version>${springdoc.version}</version>
         </dependency>
 
+        <!-- 工单导出使用 XLSX 标准工作簿，避免以 CSV 代替导致中文、换行和单元格格式丢失。 -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.4.1</version>
+        </dependency>
+
         <!-- 阿里云号码认证服务 SDK：用于发送和校验短信验证码。 -->
         <dependency>
             <groupId>com.aliyun</groupId>

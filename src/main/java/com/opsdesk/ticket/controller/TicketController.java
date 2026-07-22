@@ -21,6 +21,7 @@ import com.opsdesk.ticket.vo.TicketOperationLogVO;
 import com.opsdesk.ticket.vo.TicketVO;
 import com.opsdesk.ticket.vo.TicketWatchVO;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,6 +30,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 工单主流程 Controller。
@@ -78,6 +83,26 @@ public class TicketController {
     public ApiResponse<PageResult<TicketListItemVO>> search(@RequestBody(required = false) TicketSearchRequest request,
                                                             @AuthenticationPrincipal CurrentUser currentUser) {
         return ApiResponse.success(ticketService.search(request, currentUser));
+    }
+
+    /**
+     * 导出当前筛选范围内的工单，文件流不使用统一 JSON 包装，避免前端无法直接保存工作簿。
+     */
+    @PostMapping("/export")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @RateLimit(limit = RateLimitDefaults.ACTION_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
+    public void export(@RequestBody(required = false) TicketSearchRequest request,
+                       @AuthenticationPrincipal CurrentUser currentUser,
+                       HttpServletRequest servletRequest,
+                       HttpServletResponse response) throws IOException {
+        byte[] content = ticketService.export(request, currentUser, requestIp(servletRequest), userAgent(servletRequest));
+        String filename = URLEncoder.encode("工单导出.xlsx", StandardCharsets.UTF_8).replace("+", "%20");
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + filename);
+        response.setContentLength(content.length);
+        response.getOutputStream().write(content);
     }
 
     @PostMapping("/{id}/detail")

@@ -28,6 +28,13 @@ public interface TicketService {
 
     PageResult<TicketListItemVO> search(TicketSearchRequest request, CurrentUser currentUser);
 
+    /**
+     * 按工单列表筛选条件导出 XLSX。
+     *
+     * <p>导出与列表共用资源范围校验，仅团队负责人和管理员可调用。</p>
+     */
+    byte[] export(TicketSearchRequest request, CurrentUser currentUser, String requestIp, String userAgent);
+
     TicketVO detail(String id, CurrentUser currentUser);
 
     TicketVO submit(String id, CurrentUser currentUser, String requestIp, String userAgent);

@@ -5,6 +5,7 @@ import com.opsdesk.attachment.entity.Attachment;
 import com.opsdesk.attachment.mapper.AttachmentMapper;
 import com.opsdesk.attachment.service.AttachmentResourceAccessService;
 import com.opsdesk.attachment.vo.AttachmentVO;
+import com.opsdesk.audit.service.AuditLogService;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.id.SnowflakeIdGenerator;
@@ -49,7 +50,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.streaming.SXSSFSheet;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 
+import com.github.pagehelper.PageHelper;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -110,6 +123,15 @@ public class TicketServiceImpl implements TicketService {
     /** 解决方案摘要最大长度：用于工单详情和知识草稿的根因/结论概述。 */
     private static final int MAX_RESOLUTION_SUMMARY_LENGTH = 1000;
 
+    /** 单次同步导出上限：超过此数量需后续改用异步导出，避免占满 Web 请求内存。 */
+    private static final int MAX_EXPORT_ROWS = 10_000;
+
+    /** 导出审计操作类型：写入 audit_log，外部请求不能覆盖。 */
+    private static final String AUDIT_OPERATION_TICKET_EXPORT = "TICKET_EXPORT";
+
+    /** 工单审计业务类型：与审计日志数据字典保持一致。 */
+    private static final String AUDIT_BIZ_TYPE_TICKET = "TICKET";
+
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final TicketMapper ticketMapper;
@@ -126,6 +148,7 @@ public class TicketServiceImpl implements TicketService {
     private final AttachmentMapper attachmentMapper;
     private final AttachmentConverter attachmentConverter;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogService;
 
     public TicketServiceImpl(TicketMapper ticketMapper,
                              TicketCategoryMapper ticketCategoryMapper,
@@ -138,7 +161,7 @@ public class TicketServiceImpl implements TicketService {
                              TicketStateMachine ticketStateMachine) {
         this(ticketMapper, ticketCategoryMapper, ticketOperationLogMapper, ticketWatchMapper, teamMemberMapper,
                 sysUserMapper, idGenerator, ticketNoGenerator, ticketStateMachine, null, new TicketConverter(),
-                null, new AttachmentConverter(), null);
+                null, new AttachmentConverter(), null, null);
     }
 
     public TicketServiceImpl(TicketMapper ticketMapper,
@@ -156,7 +179,7 @@ public class TicketServiceImpl implements TicketService {
                              AttachmentConverter attachmentConverter) {
         this(ticketMapper, ticketCategoryMapper, ticketOperationLogMapper, ticketWatchMapper, teamMemberMapper,
                 sysUserMapper, idGenerator, ticketNoGenerator, ticketStateMachine, teamMapper, ticketConverter,
-                attachmentMapper, attachmentConverter, null);
+                attachmentMapper, attachmentConverter, null, null);
     }
 
     @Autowired
@@ -173,7 +196,8 @@ public class TicketServiceImpl implements TicketService {
                              TicketConverter ticketConverter,
                              AttachmentMapper attachmentMapper,
                              AttachmentConverter attachmentConverter,
-                             NotificationService notificationService) {
+                             NotificationService notificationService,
+                             AuditLogService auditLogService) {
         this.ticketMapper = ticketMapper;
         this.ticketCategoryMapper = ticketCategoryMapper;
         this.ticketOperationLogMapper = ticketOperationLogMapper;
@@ -188,6 +212,7 @@ public class TicketServiceImpl implements TicketService {
         this.attachmentMapper = attachmentMapper;
         this.attachmentConverter = attachmentConverter;
         this.notificationService = notificationService;
+        this.auditLogService = auditLogService;
     }
 
     @Override
@@ -273,6 +298,42 @@ public class TicketServiceImpl implements TicketService {
                         condition.createdTo(), currentUserId, admin),
                 this::assembleTicketListItemVO
         );
+    }
+
+    @Override
+    public byte[] export(TicketSearchRequest request, CurrentUser currentUser, String requestIp, String userAgent) {
+        Long operatorId = requireUserId(currentUser);
+        if (!hasRole(currentUser, ROLE_MANAGER) && !hasRole(currentUser, ROLE_ADMIN)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "仅团队负责人或管理员可导出工单");
+        }
+        TicketSearchRequest safeRequest = request == null ? new TicketSearchRequest() : request;
+        String format = trimToNull(safeRequest.getFormat());
+        if (format != null && !"XLSX".equalsIgnoreCase(format)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "当前仅支持 XLSX 格式导出");
+        }
+        SearchCondition condition = buildSearchCondition(safeRequest);
+        boolean admin = hasRole(currentUser, ROLE_ADMIN);
+        // 额外查询一条用于识别超限；PageHelper 在 Mapper 查询阶段追加 LIMIT，避免整表加载到内存。
+        PageHelper.startPage(1, MAX_EXPORT_ROWS + 1, false);
+        try {
+            List<Ticket> tickets = ticketMapper.search(condition.scope(), condition.ticketNo(), condition.keyword(),
+                    condition.status(), condition.priority(), condition.categoryId(), condition.creatorId(),
+                    condition.assigneeId(), condition.teamId(), condition.overdue(), condition.createdFrom(),
+                    condition.createdTo(), operatorId, admin);
+            if (tickets.size() > MAX_EXPORT_ROWS) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "导出数据超过10000条，请缩小筛选范围后重试");
+            }
+            List<TicketListItemVO> records = tickets.stream().map(this::assembleTicketListItemVO).toList();
+            byte[] workbook = buildExportWorkbook(records);
+            if (auditLogService != null) {
+                auditLogService.record(operatorId, AUDIT_OPERATION_TICKET_EXPORT, AUDIT_BIZ_TYPE_TICKET, null,
+                        "导出工单：" + records.size() + " 条", requestIp, userAgent);
+            }
+            return workbook;
+        } finally {
+            // Service 可被任务、测试等非 Web 调用复用，必须清理 ThreadLocal 分页上下文。
+            PageHelper.clearPage();
+        }
     }
 
     @Override
@@ -603,6 +664,91 @@ public class TicketServiceImpl implements TicketService {
                 parseOptionalDateTime(request.getCreatedFrom(), "创建开始时间"),
                 parseOptionalDateTime(request.getCreatedTo(), "创建结束时间")
         );
+    }
+
+    /**
+     * 生成工单 XLSX 工作簿。单元格统一按文本写入，规避标题等用户输入以公式方式被 Excel 执行。
+     */
+    private byte[] buildExportWorkbook(List<TicketListItemVO> records) {
+        String[] headers = {"工单编号", "标题", "分类", "优先级", "状态", "提交人", "处理人", "处理团队", "SLA 截止时间", "SLA 状态", "创建时间", "更新时间"};
+        try (SXSSFWorkbook workbook = new SXSSFWorkbook(100); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            workbook.setCompressTempFiles(true);
+            SXSSFSheet sheet = workbook.createSheet("工单列表");
+            sheet.createFreezePane(0, 1);
+            CellStyle headerStyle = workbook.createCellStyle();
+            headerStyle.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            var headerFont = workbook.createFont();
+            headerFont.setColor(IndexedColors.WHITE.getIndex());
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+
+            Row header = sheet.createRow(0);
+            for (int index = 0; index < headers.length; index++) {
+                Cell cell = header.createCell(index);
+                cell.setCellValue(headers[index]);
+                cell.setCellStyle(headerStyle);
+            }
+            int[] widths = {20, 36, 18, 12, 16, 16, 16, 18, 20, 12, 20, 20};
+            for (int index = 0; index < widths.length; index++) {
+                sheet.setColumnWidth(index, widths[index] * 256);
+            }
+            for (int index = 0; index < records.size(); index++) {
+                TicketListItemVO ticket = records.get(index);
+                Row row = sheet.createRow(index + 1);
+                String[] values = {
+                        ticket.ticketNo(), ticket.title(), ticket.categoryName(), priorityLabel(ticket.priority()),
+                        statusLabel(ticket.status()), ticket.creatorName(), ticket.assigneeName(), ticket.teamName(),
+                        ticket.dueTime(), Boolean.TRUE.equals(ticket.overdue()) ? "已超时" : "未超时",
+                        ticket.createdAt(), ticket.updatedAt()
+                };
+                for (int column = 0; column < values.length; column++) {
+                    row.createCell(column).setCellValue(safeExcelText(values[column]));
+                }
+            }
+            workbook.write(output);
+            workbook.dispose();
+            return output.toByteArray();
+        } catch (IOException exception) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成工单导出文件失败");
+        }
+    }
+
+    /** Excel 会将等号等开头的值识别为公式，导出用户输入前需转义为纯文本。 */
+    private String safeExcelText(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        String text = value.trim();
+        return text.startsWith("=") || text.startsWith("+") || text.startsWith("-") || text.startsWith("@")
+                ? "'" + text : text;
+    }
+
+    /** 工单优先级中文映射：仅展示使用，数据层仍保持稳定的英文枚举编码。 */
+    private String priorityLabel(String priority) {
+        return switch (priority == null ? "" : priority) {
+            case "LOW" -> "低";
+            case "MEDIUM" -> "中";
+            case "HIGH" -> "高";
+            case "URGENT" -> "紧急";
+            default -> priority;
+        };
+    }
+
+    /** 工单状态中文映射：导出面向业务人员，不直接暴露内部状态编码。 */
+    private String statusLabel(String status) {
+        return switch (status == null ? "" : status) {
+            case "DRAFT" -> "草稿";
+            case "PENDING_ASSIGN" -> "待分派";
+            case "PENDING_PROCESS" -> "待处理";
+            case "PROCESSING" -> "处理中";
+            case "PENDING_CONFIRM" -> "待确认";
+            case "COMPLETED" -> "已完成";
+            case "CLOSED" -> "已关闭";
+            case "CANCELLED" -> "已取消";
+            default -> status;
+        };
     }
 
     private TicketStateContext buildStateContext(Ticket ticket, CurrentUser currentUser) {

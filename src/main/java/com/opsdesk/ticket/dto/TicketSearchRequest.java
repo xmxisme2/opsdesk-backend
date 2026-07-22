@@ -26,6 +26,8 @@ public class TicketSearchRequest extends PageQuery {
     private Boolean overdue;
     private String createdFrom;
     private String createdTo;
+    /** 导出格式：当前仅支持 xlsx；列表查询忽略该字段，避免影响现有分页契约。 */
+    private String format;
 
     public String normalizedKeyword() {
         return StringUtils.hasText(keyword) ? keyword.trim() : null;

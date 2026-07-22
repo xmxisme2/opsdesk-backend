@@ -12,6 +12,7 @@ import com.opsdesk.ticket.dto.TicketAssignRequest;
 import com.opsdesk.ticket.dto.TicketCreateRequest;
 import com.opsdesk.ticket.converter.TicketConverter;
 import com.opsdesk.ticket.dto.TicketReasonRequest;
+import com.opsdesk.ticket.dto.TicketSearchRequest;
 import com.opsdesk.ticket.dto.TicketTransferRequest;
 import com.opsdesk.ticket.dto.TicketUpdateRequest;
 import com.opsdesk.ticket.entity.Ticket;
@@ -31,13 +32,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -127,6 +131,27 @@ class TicketServiceImplTest {
         assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("PENDING_ASSIGN");
         assertThat(ticketVO.ticketNo()).isEqualTo("TK202606160001");
         assertThat(ticketVO.status()).isEqualTo("PENDING_ASSIGN");
+    }
+
+    @Test
+    void exportShouldGenerateXlsxWithChineseLabelsAndEscapedFormulaText() throws Exception {
+        Ticket ticket = pendingAssignTicket(10L, 1L);
+        ticket.setTitle("=危险公式");
+        ticket.setPriority("HIGH");
+        when(ticketMapper.search(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
+                .thenReturn(List.of(ticket));
+        TicketCategory category = category();
+        category.setName("系统故障");
+        when(ticketCategoryMapper.findById(1L)).thenReturn(category);
+
+        byte[] content = ticketService.export(new TicketSearchRequest(), user(10L, "MANAGER"), "127.0.0.1", "JUnit");
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(content))) {
+            assertThat(workbook.getSheetAt(0).getRow(0).getCell(0).getStringCellValue()).isEqualTo("工单编号");
+            assertThat(workbook.getSheetAt(0).getRow(1).getCell(1).getStringCellValue()).isEqualTo("'=危险公式");
+            assertThat(workbook.getSheetAt(0).getRow(1).getCell(3).getStringCellValue()).isEqualTo("高");
+            assertThat(workbook.getSheetAt(0).getRow(1).getCell(4).getStringCellValue()).isEqualTo("待分派");
+        }
     }
 
     @Test
