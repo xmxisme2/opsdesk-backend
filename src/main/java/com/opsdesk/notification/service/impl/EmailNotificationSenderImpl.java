@@ -1,5 +1,6 @@
 package com.opsdesk.notification.service.impl;
 
+import com.opsdesk.config.EmailNotificationProperties;
 import com.opsdesk.notification.entity.Notification;
 import com.opsdesk.notification.service.EmailNotificationSender;
 import com.opsdesk.system.service.EmailNotificationSettingsService;
@@ -22,11 +23,14 @@ public class EmailNotificationSenderImpl implements EmailNotificationSender {
     private static final String SUBJECT_PREFIX = "[OpsDesk] ";
 
     private final EmailNotificationSettingsService settingsService;
+    private final EmailNotificationProperties emailNotificationProperties;
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
 
     public EmailNotificationSenderImpl(EmailNotificationSettingsService settingsService,
+                                       EmailNotificationProperties emailNotificationProperties,
                                        ObjectProvider<JavaMailSender> mailSenderProvider) {
         this.settingsService = settingsService;
+        this.emailNotificationProperties = emailNotificationProperties;
         this.mailSenderProvider = mailSenderProvider;
     }
 
@@ -34,7 +38,7 @@ public class EmailNotificationSenderImpl implements EmailNotificationSender {
     public void send(Notification notification) {
         try {
             EmailNotificationSettingsVO settings = settingsService.detail();
-            if (!settings.enabled()) return;
+            if (!emailNotificationProperties.isEnabled()) return;
             JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
             if (mailSender == null) {
                 LOGGER.warn("邮件通知已开启但 SMTP 未配置，已跳过投递：notificationId={}", notification.getId());

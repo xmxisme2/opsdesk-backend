@@ -2,7 +2,7 @@
 INSERT INTO system_config (id, config_key, config_value, config_group, description, editable, `sensitive`, create_by, update_by)
 VALUES
   (12, 'notification.email.enabled', 'false', 'NOTIFICATION', '邮件通知开关；开启后将所有通知投递至默认邮箱', 1, 0, NULL, NULL),
-  (13, 'notification.email.default_recipient', 'xmxisme@gmail.com', 'NOTIFICATION', '邮件通知开启时使用的默认收件邮箱', 1, 0, NULL, NULL)
+  (13, 'notification.email.default_recipient', 'sean.siu@astralotus.com', 'NOTIFICATION', '邮件通知开启时使用的默认收件邮箱', 1, 0, NULL, NULL)
 ON DUPLICATE KEY UPDATE
   config_value = VALUES(config_value),
   description = VALUES(description),

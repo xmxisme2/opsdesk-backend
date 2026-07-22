@@ -3,6 +3,7 @@ package com.opsdesk.notification.service.impl;
 import com.opsdesk.notification.entity.Notification;
 import com.opsdesk.system.service.EmailNotificationSettingsService;
 import com.opsdesk.system.vo.EmailNotificationSettingsVO;
+import com.opsdesk.config.EmailNotificationProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mail.SimpleMailMessage;
@@ -22,10 +23,11 @@ class EmailNotificationSenderImplTest {
         EmailNotificationSettingsService settingsService = mock(EmailNotificationSettingsService.class);
         JavaMailSender mailSender = mock(JavaMailSender.class);
         @SuppressWarnings("unchecked") ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
-        when(settingsService.detail()).thenReturn(new EmailNotificationSettingsVO(true, "xmxisme@gmail.com"));
+        EmailNotificationProperties properties = enabledProperties();
+        when(settingsService.detail()).thenReturn(new EmailNotificationSettingsVO(true, "sean.siu@astralotus.com"));
         when(provider.getIfAvailable()).thenReturn(mailSender);
 
-        new EmailNotificationSenderImpl(settingsService, provider).send(notification());
+        new EmailNotificationSenderImpl(settingsService, properties, provider).send(notification());
 
         verify(mailSender).send(any(SimpleMailMessage.class));
     }
@@ -34,9 +36,10 @@ class EmailNotificationSenderImplTest {
     void shouldSkipWhenDisabled() {
         EmailNotificationSettingsService settingsService = mock(EmailNotificationSettingsService.class);
         @SuppressWarnings("unchecked") ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
-        when(settingsService.detail()).thenReturn(new EmailNotificationSettingsVO(false, "xmxisme@gmail.com"));
+        EmailNotificationProperties properties = disabledProperties();
+        when(settingsService.detail()).thenReturn(new EmailNotificationSettingsVO(false, "sean.siu@astralotus.com"));
 
-        new EmailNotificationSenderImpl(settingsService, provider).send(notification());
+        new EmailNotificationSenderImpl(settingsService, properties, provider).send(notification());
 
         verify(provider, never()).getIfAvailable();
     }
@@ -47,5 +50,18 @@ class EmailNotificationSenderImplTest {
         notification.setTitle("工单状态已变更");
         notification.setContent("工单 TK202607220001 已处理完成。");
         return notification;
+    }
+
+    /** 测试显式控制 YAML 对应的运行开关，避免依赖系统配置中的历史值。 */
+    private EmailNotificationProperties enabledProperties() {
+        EmailNotificationProperties properties = new EmailNotificationProperties();
+        properties.setEnabled(true);
+        return properties;
+    }
+
+    private EmailNotificationProperties disabledProperties() {
+        EmailNotificationProperties properties = new EmailNotificationProperties();
+        properties.setEnabled(false);
+        return properties;
     }
 }

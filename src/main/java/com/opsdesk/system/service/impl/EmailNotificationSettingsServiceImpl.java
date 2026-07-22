@@ -1,6 +1,7 @@
 package com.opsdesk.system.service.impl;
 
 import com.opsdesk.audit.service.AuditLogService;
+import com.opsdesk.config.EmailNotificationProperties;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.system.dto.EmailNotificationSettingsUpdateRequest;
@@ -23,19 +24,22 @@ public class EmailNotificationSettingsServiceImpl implements EmailNotificationSe
     public static final String KEY_ENABLED = "notification.email.enabled";
     /** 开关开启后的固定默认收件邮箱。 */
     public static final String KEY_DEFAULT_RECIPIENT = "notification.email.default_recipient";
-    public static final String DEFAULT_RECIPIENT = "xmxisme@gmail.com";
+    public static final String DEFAULT_RECIPIENT = "sean.siu@astralotus.com";
 
     private final SystemConfigMapper mapper;
     private final AuditLogService auditLogService;
+    private final EmailNotificationProperties emailNotificationProperties;
 
-    public EmailNotificationSettingsServiceImpl(SystemConfigMapper mapper, AuditLogService auditLogService) {
+    public EmailNotificationSettingsServiceImpl(SystemConfigMapper mapper, AuditLogService auditLogService,
+                                                EmailNotificationProperties emailNotificationProperties) {
         this.mapper = mapper;
         this.auditLogService = auditLogService;
+        this.emailNotificationProperties = emailNotificationProperties;
     }
 
     @Override
     public EmailNotificationSettingsVO detail() {
-        boolean enabled = false;
+        boolean enabled = emailNotificationProperties.isEnabled();
         String recipient = DEFAULT_RECIPIENT;
         for (SystemConfig config : mapper.findByGroup(CONFIG_GROUP)) {
             if (KEY_ENABLED.equals(config.getConfigKey())) enabled = Boolean.parseBoolean(config.getConfigValue());
@@ -51,12 +55,11 @@ public class EmailNotificationSettingsServiceImpl implements EmailNotificationSe
     public EmailNotificationSettingsVO update(EmailNotificationSettingsUpdateRequest request, Long operatorId,
                                               String requestIp, String userAgent) {
         String recipient = request.defaultRecipient().trim().toLowerCase(Locale.ROOT);
-        if (mapper.updateValue(KEY_ENABLED, String.valueOf(request.enabled()), operatorId) != 1
-                || mapper.updateValue(KEY_DEFAULT_RECIPIENT, recipient, operatorId) != 1) {
+        if (mapper.updateValue(KEY_DEFAULT_RECIPIENT, recipient, operatorId) != 1) {
             throw new BusinessException(ErrorCode.STATE_CONFLICT, "邮件通知配置缺失，请先执行数据库迁移脚本");
         }
         auditLogService.record(operatorId, "UPDATE", "SYSTEM_CONFIG", null,
-                "更新邮件通知配置：" + (request.enabled() ? "开启" : "关闭"), requestIp, userAgent);
-        return new EmailNotificationSettingsVO(request.enabled(), recipient);
+                "更新邮件通知默认收件邮箱", requestIp, userAgent);
+        return new EmailNotificationSettingsVO(emailNotificationProperties.isEnabled(), recipient);
     }
 }
