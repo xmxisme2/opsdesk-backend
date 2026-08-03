@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.http.MediaType;
 
 /** 已登录用户访问的知识库 RAG JSON 降级接口。 */
 @RestController
@@ -24,5 +26,11 @@ public class AiKnowledgeChatController {
     public ApiResponse<KnowledgeChatResponseVO> chat(@Valid @RequestBody KnowledgeChatRequest request,
                                                      @AuthenticationPrincipal CurrentUser currentUser) {
         return ApiResponse.success(service.chat(request, currentUser));
+    }
+
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public StreamingResponseBody stream(@Valid @RequestBody KnowledgeChatRequest request,
+                                        @AuthenticationPrincipal CurrentUser currentUser) {
+        return service.stream(request, currentUser);
     }
 }
