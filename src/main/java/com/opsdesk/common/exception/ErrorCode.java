@@ -31,8 +31,26 @@ public enum ErrorCode {
     /** 文件上传失败：附件写入、校验或存储失败时使用。 */
     FILE_UPLOAD_FAILED(500101, "文件上传失败"),
 
-    /** AI 服务调用失败：后续真实 AI 接口失败时使用，首版暂不主动触发。 */
-    AI_SERVICE_FAILED(500201, "AI 服务调用失败");
+    /** AI 服务调用失败：模型或 AI 内部处理失败时使用。 */
+    AI_SERVICE_FAILED(500201, "AI 服务调用失败"),
+
+    /** AI 服务不可用：独立服务、必要凭据或关键依赖未就绪时使用。 */
+    AI_SERVICE_UNAVAILABLE(500202, "AI 服务不可用"),
+
+    /** 知识检索失败：OpenSearch 查询或结果融合失败时使用。 */
+    KNOWLEDGE_RETRIEVAL_FAILED(500203, "知识检索失败"),
+
+    /** 向量生成失败：Embedding 提供方调用失败时使用。 */
+    EMBEDDING_FAILED(500204, "向量生成失败"),
+
+    /** 索引任务冲突：已有同类型索引任务正在执行时使用。 */
+    INDEX_TASK_CONFLICT(409201, "索引任务已在执行"),
+
+    /** AI 资源无权访问：会话、消息或引用不属于当前用户时使用。 */
+    AI_RESOURCE_FORBIDDEN(403201, "无权访问 AI 会话或引用"),
+
+    /** AI 请求参数错误：问题为空、过长或含不允许内容时使用。 */
+    AI_REQUEST_INVALID(400201, "AI 问题为空、过长或包含不允许内容");
 
     private final int code;
     private final String message;

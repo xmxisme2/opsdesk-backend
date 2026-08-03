@@ -62,6 +62,8 @@ if (-not $SeedOnly) {
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "08_migrate_notification_email_config.sql")
     # 工单分派通知改为展示处理组名称，修复仅分派团队时显示“待分派”的歧义。
     Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "09_migrate_ticket_assignment_template.sql")
+    # AI/RAG 阶段 2：补齐知识文章版本和事务消息 Outbox。
+    Invoke-OpsDeskSqlFile -SqlFile (Join-Path $scriptRoot "10_migrate_ai_outbox.sql")
 }
 
 if (-not $SchemaOnly) {

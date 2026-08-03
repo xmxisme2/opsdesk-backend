@@ -10,6 +10,7 @@ import java.util.List;
 @Mapper
 public interface KnowledgeArticleMapper {
     KnowledgeArticleRow findById(@Param("id") Long id);
+    List<KnowledgeArticleRow> findPublishedAfterId(@Param("afterId") Long afterId, @Param("limit") int limit);
     List<KnowledgeArticleRow> search(@Param("keyword") String keyword,
                                      @Param("categoryId") Long categoryId,
                                      @Param("tag") String tag,

@@ -16,6 +16,14 @@ spring:
       host: 127.0.0.1
       port: 6379
       timeout: 3s
+  rabbitmq:
+    host: ${AI_RABBITMQ_HOST:127.0.0.1}
+    port: ${AI_RABBITMQ_PORT:5672}
+    virtual-host: ${AI_RABBITMQ_VHOST:/opsdesk}
+    username: ${AI_RABBITMQ_USERNAME:opsdesk_ai}
+    password: ${AI_RABBITMQ_PASSWORD:}
+    publisher-confirm-type: correlated
+    publisher-returns: true
   jackson:
     time-zone: Asia/Shanghai
     date-format: yyyy-MM-dd HH:mm:ss
@@ -60,6 +68,23 @@ opsdesk:
     file-root: storage/files
     # 用户自定义头像与业务附件隔离存储，并通过 /uploads/avatars/** 仅公开图片读取。
     avatar-root: storage/avatars
+  # 邮件通知开关仅允许由本地部署配置控制；SMTP 凭据仍由 spring.mail 的 MAIL_* 环境变量读取。
+  email-notification:
+    enabled: false
+  ai-service:
+    # 独立 AI 服务仅允许主应用代理访问；共享密钥缺失时代理必须安全失败。
+    base-url: ${AI_SERVICE_BASE_URL:http://127.0.0.1:8081}
+    service-jwt-secret: ${AI_SERVICE_JWT_SECRET:}
+    issuer: opsdesk-backend
+    audience: opsdesk-ai-service
+    token-ttl-seconds: 60
+    connect-timeout-seconds: 3
+    read-timeout-seconds: 10
+  ai-events:
+    # 阶段 2 本地联调时显式开启；密码缺失时保持关闭，不影响知识库事务。
+    enabled: ${AI_EVENTS_ENABLED:false}
+    dispatch-delay-ms: 1000
+    batch-size: 50
   sms:
     # 短信能力开关：完成阿里云 SDK 与校验流程前保持关闭，避免配置密钥后误发短信。
     enabled: false

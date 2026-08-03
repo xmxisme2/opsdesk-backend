@@ -19,6 +19,7 @@ public class KnowledgeArticle {
     private Long sourceTicketId;
     private String status;
     private Long authorId;
+    private Long version;
     private Long viewCount;
     private LocalDateTime publishedTime;
     private LocalDateTime createTime;

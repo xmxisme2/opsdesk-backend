@@ -5,4 +5,4 @@ logs/
 *.iml
 storage/files/*
 !storage/files/.gitkeep
-
+src/main/resources/key.properties

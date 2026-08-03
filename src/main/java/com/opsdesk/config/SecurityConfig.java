@@ -1,5 +1,6 @@
 package com.opsdesk.config;
 
+import com.opsdesk.ai.security.InboundServiceJwtAuthenticationFilter;
 import com.opsdesk.common.security.JsonAccessDeniedHandler;
 import com.opsdesk.common.security.JsonAuthenticationEntryPoint;
 import com.opsdesk.common.security.JwtAuthenticationFilter;
@@ -26,13 +27,16 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JsonAuthenticationEntryPoint authenticationEntryPoint;
     private final JsonAccessDeniedHandler accessDeniedHandler;
+    private final InboundServiceJwtAuthenticationFilter inboundServiceJwtAuthenticationFilter;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
                           JsonAuthenticationEntryPoint authenticationEntryPoint,
-                          JsonAccessDeniedHandler accessDeniedHandler) {
+                          JsonAccessDeniedHandler accessDeniedHandler,
+                          InboundServiceJwtAuthenticationFilter inboundServiceJwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
+        this.inboundServiceJwtAuthenticationFilter = inboundServiceJwtAuthenticationFilter;
     }
 
     @Bean
@@ -41,6 +45,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/internal/**").hasRole("SERVICE")
                         .requestMatchers(
                                 "/api/health/**",
                                 "/api/auth/register",
@@ -61,6 +66,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler)
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(inboundServiceJwtAuthenticationFilter, JwtAuthenticationFilter.class)
                 .build();
     }
 

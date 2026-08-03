@@ -3,7 +3,7 @@
 <mapper namespace="com.opsdesk.knowledge.mapper.KnowledgeArticleMapper">
     <sql id="ArticleSelect">
         a.id, a.title, a.summary, a.content, a.category_id, a.source_ticket_id, a.status,
-        a.author_id, a.view_count, a.published_time, a.create_time, a.update_time,
+        a.author_id, a.version, a.view_count, a.published_time, a.create_time, a.update_time,
         a.create_by, a.update_by, a.deleted, c.name AS category_name,
         u.username AS author_name, t.ticket_no AS source_ticket_no,
         GROUP_CONCAT(DISTINCT kt.name ORDER BY kt.name SEPARATOR ',') AS tag_names
@@ -19,9 +19,26 @@
         LEFT JOIN knowledge_tag kt ON kt.id = kat.tag_id AND kt.deleted = 0
         WHERE a.id = #{id} AND a.deleted = 0
         GROUP BY a.id, a.title, a.summary, a.content, a.category_id, a.source_ticket_id, a.status,
-                 a.author_id, a.view_count, a.published_time, a.create_time, a.update_time,
+                 a.author_id, a.version, a.view_count, a.published_time, a.create_time, a.update_time,
                  a.create_by, a.update_by, a.deleted, c.name, u.username, t.ticket_no
         LIMIT 1
+    </select>
+
+    <select id="findPublishedAfterId" resultType="com.opsdesk.knowledge.mapper.KnowledgeArticleRow">
+        SELECT <include refid="ArticleSelect"/>
+        FROM knowledge_article a
+        LEFT JOIN knowledge_category c ON c.id = a.category_id AND c.deleted = 0
+        LEFT JOIN sys_user u ON u.id = a.author_id AND u.deleted = 0
+        LEFT JOIN ticket t ON t.id = a.source_ticket_id AND t.deleted = 0
+        LEFT JOIN knowledge_article_tag kat ON kat.article_id = a.id AND kat.deleted = 0
+        LEFT JOIN knowledge_tag kt ON kt.id = kat.tag_id AND kt.deleted = 0
+        WHERE a.deleted = 0 AND a.status = 'PUBLISHED'
+          AND a.id &gt; #{afterId}
+        GROUP BY a.id, a.title, a.summary, a.content, a.category_id, a.source_ticket_id, a.status,
+                 a.author_id, a.version, a.view_count, a.published_time, a.create_time, a.update_time,
+                 a.create_by, a.update_by, a.deleted, c.name, u.username, t.ticket_no
+        ORDER BY a.id ASC
+        LIMIT #{limit}
     </select>
 
     <select id="search" resultType="com.opsdesk.knowledge.mapper.KnowledgeArticleRow">
@@ -46,7 +63,7 @@
         <if test="status != null and status != ''">AND a.status = #{status}</if>
         <if test="authorId != null">AND a.author_id = #{authorId}</if>
         GROUP BY a.id, a.title, a.summary, a.content, a.category_id, a.source_ticket_id, a.status,
-                 a.author_id, a.view_count, a.published_time, a.create_time, a.update_time,
+                 a.author_id, a.version, a.view_count, a.published_time, a.create_time, a.update_time,
                  a.create_by, a.update_by, a.deleted, c.name, u.username, t.ticket_no
         <choose>
             <when test="sortBy == 'viewCount'">ORDER BY a.view_count DESC, a.id DESC</when>
@@ -57,24 +74,25 @@
 
     <insert id="insert">
         INSERT INTO knowledge_article (id, title, summary, content, category_id, source_ticket_id,
-          status, author_id, view_count, published_time, create_by, update_by, deleted)
+          status, author_id, version, view_count, published_time, create_by, update_by, deleted)
         VALUES (#{id}, #{title}, #{summary}, #{content}, #{categoryId}, #{sourceTicketId},
-          #{status}, #{authorId}, #{viewCount}, #{publishedTime}, #{createBy}, #{updateBy}, 0)
+          #{status}, #{authorId}, #{version}, #{viewCount}, #{publishedTime}, #{createBy}, #{updateBy}, 0)
     </insert>
 
     <update id="update">
         UPDATE knowledge_article SET title=#{title}, summary=#{summary}, content=#{content},
           category_id=#{categoryId}, source_ticket_id=#{sourceTicketId}, status=#{status},
-          published_time=#{publishedTime}, update_by=#{updateBy}, update_time=CURRENT_TIMESTAMP
+          published_time=#{publishedTime}, version=version+1,
+          update_by=#{updateBy}, update_time=CURRENT_TIMESTAMP
         WHERE id=#{id} AND deleted=0
     </update>
 
     <update id="updateStatus">
         UPDATE knowledge_article SET status=#{status},
           published_time=<choose><when test="published">COALESCE(published_time, CURRENT_TIMESTAMP)</when><otherwise>published_time</otherwise></choose>,
-          update_by=#{operatorId}, update_time=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted=0
+          version=version+1, update_by=#{operatorId}, update_time=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted=0
     </update>
-    <update id="logicalDelete">UPDATE knowledge_article SET deleted=1, update_by=#{operatorId}, update_time=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted=0</update>
+    <update id="logicalDelete">UPDATE knowledge_article SET deleted=1, version=version+1, update_by=#{operatorId}, update_time=CURRENT_TIMESTAMP WHERE id=#{id} AND deleted=0</update>
     <update id="incrementViewCount">UPDATE knowledge_article SET view_count=view_count+1 WHERE id=#{id} AND deleted=0 AND status='PUBLISHED'</update>
     <select id="countByCategoryId" resultType="int">SELECT COUNT(1) FROM knowledge_article WHERE category_id=#{categoryId} AND deleted=0</select>
     <select id="findTagIds" resultType="long">SELECT tag_id FROM knowledge_article_tag WHERE article_id=#{articleId} AND deleted=0</select>

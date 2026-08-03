@@ -1,4 +1,6 @@
 -- 邮件通知配置：旧环境执行一次即可，默认关闭以避免未配置 SMTP 时误发邮件。
+USE opsdesk;
+
 INSERT INTO system_config (id, config_key, config_value, config_group, description, editable, `sensitive`, create_by, update_by)
 VALUES
   (12, 'notification.email.enabled', 'false', 'NOTIFICATION', '邮件通知开关；开启后将所有通知投递至默认邮箱', 1, 0, NULL, NULL),

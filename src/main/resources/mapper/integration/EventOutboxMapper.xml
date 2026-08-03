@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.opsdesk.integration.outbox.mapper.EventOutboxMapper">
+
+    <resultMap id="EventOutboxResultMap" type="com.opsdesk.integration.outbox.entity.EventOutbox">
+        <id property="id" column="id"/>
+        <result property="eventId" column="event_id"/>
+        <result property="aggregateType" column="aggregate_type"/>
+        <result property="aggregateId" column="aggregate_id"/>
+        <result property="eventType" column="event_type"/>
+        <result property="eventVersion" column="event_version"/>
+        <result property="routingKey" column="routing_key"/>
+        <result property="payload" column="payload"/>
+        <result property="status" column="status"/>
+        <result property="retryCount" column="retry_count"/>
+        <result property="nextRetryTime" column="next_retry_time"/>
+        <result property="publishedTime" column="published_time"/>
+        <result property="lastError" column="last_error"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="createBy" column="create_by"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="deleted" column="deleted"/>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO event_outbox (
+          id, event_id, aggregate_type, aggregate_id, event_type, event_version,
+          routing_key, payload, status, retry_count, next_retry_time, published_time,
+          last_error, create_by, update_by, deleted
+        ) VALUES (
+          #{id}, #{eventId}, #{aggregateType}, #{aggregateId}, #{eventType}, #{eventVersion},
+          #{routingKey}, #{payload}, #{status}, #{retryCount}, #{nextRetryTime}, #{publishedTime},
+          #{lastError}, #{createBy}, #{updateBy}, 0
+        )
+    </insert>
+
+    <select id="findDispatchable" resultMap="EventOutboxResultMap">
+        SELECT id, event_id, aggregate_type, aggregate_id, event_type, event_version,
+               routing_key, payload, status, retry_count, next_retry_time, published_time,
+               last_error, create_time, update_time, create_by, update_by, deleted
+        FROM event_outbox
+        WHERE deleted = 0
+          AND status IN ('PENDING', 'FAILED')
+          AND (next_retry_time IS NULL OR next_retry_time &lt;= CURRENT_TIMESTAMP)
+        ORDER BY create_time ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="claim">
+        UPDATE event_outbox
+        SET status = 'SENDING', update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND deleted = 0
+          AND status IN ('PENDING', 'FAILED')
+          AND (next_retry_time IS NULL OR next_retry_time &lt;= CURRENT_TIMESTAMP)
+    </update>
+
+    <update id="markPublished">
+        UPDATE event_outbox
+        SET status = 'PUBLISHED',
+            published_time = CURRENT_TIMESTAMP,
+            last_error = NULL,
+            next_retry_time = NULL,
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND deleted = 0 AND status = 'SENDING'
+    </update>
+
+    <update id="markFailed">
+        UPDATE event_outbox
+        SET status = 'FAILED',
+            retry_count = retry_count + 1,
+            next_retry_time = DATE_ADD(CURRENT_TIMESTAMP, INTERVAL #{retryDelaySeconds} SECOND),
+            last_error = #{lastError},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND deleted = 0 AND status = 'SENDING'
+    </update>
+
+    <update id="recoverStaleSending">
+        UPDATE event_outbox
+        SET status = 'FAILED',
+            next_retry_time = CURRENT_TIMESTAMP,
+            last_error = '发布进程中断，已自动恢复',
+            update_time = CURRENT_TIMESTAMP
+        WHERE deleted = 0
+          AND status = 'SENDING'
+          AND update_time &lt; DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 5 MINUTE)
+    </update>
+</mapper>

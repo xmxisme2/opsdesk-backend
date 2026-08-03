@@ -1,5 +1,7 @@
 -- 为既有本地库补齐工单结构化解决方案字段。
 -- 每条语句独立判断，确保重复执行不会失败。
+USE opsdesk;
+
 SET @schema_name = DATABASE();
 
 SET @column_exists = (

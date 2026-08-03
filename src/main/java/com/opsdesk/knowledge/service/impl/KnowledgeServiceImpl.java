@@ -26,6 +26,7 @@ import com.opsdesk.knowledge.service.KnowledgeService;
 import com.opsdesk.knowledge.vo.KnowledgeArticleVO;
 import com.opsdesk.knowledge.vo.KnowledgeCategoryVO;
 import com.opsdesk.knowledge.vo.KnowledgeTagVO;
+import com.opsdesk.integration.knowledge.KnowledgeOutboxEventService;
 import com.opsdesk.ticket.entity.Ticket;
 import com.opsdesk.ticket.mapper.TicketMapper;
 import com.opsdesk.ticket.mapper.TicketOperationLogMapper;
@@ -55,6 +56,14 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private static final String ROLE_ADMIN = "ADMIN";
     private static final Set<String> TERMINAL_TICKET_STATUSES = Set.of("COMPLETED", "CLOSED");
     private static final Set<String> ARTICLE_STATUSES = Set.of(STATUS_DRAFT, STATUS_PUBLISHED, STATUS_OFFLINE);
+    /** 知识文章发布事件，仅由服务端状态流转产生。 */
+    private static final String EVENT_PUBLISHED = "KnowledgeArticlePublished";
+    /** 已发布文章内容更新事件，仅由服务端编辑事务产生。 */
+    private static final String EVENT_UPDATED = "KnowledgeArticleUpdated";
+    /** 知识文章下线事件，仅由服务端状态流转产生。 */
+    private static final String EVENT_OFFLINE = "KnowledgeArticleOffline";
+    /** 知识文章删除事件，仅由服务端逻辑删除事务产生。 */
+    private static final String EVENT_DELETED = "KnowledgeArticleDeleted";
 
     private final KnowledgeArticleMapper articleMapper;
     private final KnowledgeCategoryMapper categoryMapper;
@@ -66,6 +75,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private final AuditLogService auditLogService;
     private final AttachmentService attachmentService;
     private final TicketOperationLogMapper ticketOperationLogMapper;
+    private final KnowledgeOutboxEventService knowledgeOutboxEventService;
 
     public KnowledgeServiceImpl(KnowledgeArticleMapper articleMapper, KnowledgeCategoryMapper categoryMapper,
                                 KnowledgeTagMapper tagMapper, TicketMapper ticketMapper,
@@ -73,16 +83,26 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                                 SnowflakeIdGenerator idGenerator, AuditLogService auditLogService,
                                 AttachmentService attachmentService) {
         this(articleMapper, categoryMapper, tagMapper, ticketMapper, commentMapper, converter, idGenerator,
-                auditLogService, attachmentService, null);
+                auditLogService, attachmentService, null, null);
     }
 
-    /** Spring 注入完整依赖；操作日志仅用于兼容历史工单缺失结构化解决方案的情况。 */
-    @Autowired
     public KnowledgeServiceImpl(KnowledgeArticleMapper articleMapper, KnowledgeCategoryMapper categoryMapper,
                                 KnowledgeTagMapper tagMapper, TicketMapper ticketMapper,
                                 TicketCommentMapper commentMapper, KnowledgeConverter converter,
                                 SnowflakeIdGenerator idGenerator, AuditLogService auditLogService,
                                 AttachmentService attachmentService, TicketOperationLogMapper ticketOperationLogMapper) {
+        this(articleMapper, categoryMapper, tagMapper, ticketMapper, commentMapper, converter, idGenerator,
+                auditLogService, attachmentService, ticketOperationLogMapper, null);
+    }
+
+    /** Spring 注入完整依赖；知识事件与文章变更共享事务，避免数据库与消息状态不一致。 */
+    @Autowired
+    public KnowledgeServiceImpl(KnowledgeArticleMapper articleMapper, KnowledgeCategoryMapper categoryMapper,
+                                KnowledgeTagMapper tagMapper, TicketMapper ticketMapper,
+                                TicketCommentMapper commentMapper, KnowledgeConverter converter,
+                                SnowflakeIdGenerator idGenerator, AuditLogService auditLogService,
+                                AttachmentService attachmentService, TicketOperationLogMapper ticketOperationLogMapper,
+                                KnowledgeOutboxEventService knowledgeOutboxEventService) {
         this.articleMapper = articleMapper;
         this.categoryMapper = categoryMapper;
         this.tagMapper = tagMapper;
@@ -93,6 +113,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         this.auditLogService = auditLogService;
         this.attachmentService = attachmentService;
         this.ticketOperationLogMapper = ticketOperationLogMapper;
+        this.knowledgeOutboxEventService = knowledgeOutboxEventService;
     }
 
     @Override
@@ -132,6 +153,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         article.setId(idGenerator.nextId());
         article.setAuthorId(operatorId);
         article.setStatus(createStatus);
+        article.setVersion(1L);
         article.setViewCount(0L);
         article.setCreateBy(operatorId);
         applyArticle(article, request, operatorId, false);
@@ -143,6 +165,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         if (STATUS_PUBLISHED.equals(createStatus)) {
             // 新建即发布也需要独立审计，保证与草稿后续发布的追溯口径一致。
             audit(operatorId, "KNOWLEDGE_PUBLISH", article.getId(), "发布知识库文章：" + article.getTitle(), ip, userAgent);
+            recordKnowledgeEvent(EVENT_PUBLISHED, "knowledge.article.published",
+                    requireArticle(article.getId()), createStatus, operatorId);
         }
         return toArticleVO(requireArticle(article.getId()), user);
     }
@@ -161,7 +185,12 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         attachmentService.bindTemporaryAttachments(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE,
                 articleId, request.getAttachmentIds(), user);
         audit(requireUserId(user), "KNOWLEDGE_UPDATE", articleId, "编辑知识库文章：" + current.getTitle(), ip, userAgent);
-        return toArticleVO(requireArticle(articleId), user);
+        KnowledgeArticleRow updated = requireArticle(articleId);
+        if (STATUS_PUBLISHED.equals(updated.getStatus())) {
+            recordKnowledgeEvent(EVENT_UPDATED, "knowledge.article.updated",
+                    updated, updated.getStatus(), requireUserId(user));
+        }
+        return toArticleVO(updated, user);
     }
 
     @Override
@@ -173,6 +202,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         clearTags(articleId, requireUserId(user));
         attachmentService.logicalDeleteBoundAttachments(AttachmentResourceAccessService.BIZ_TYPE_KNOWLEDGE, articleId, user);
         articleMapper.logicalDelete(articleId, requireUserId(user));
+        recordKnowledgeEvent(EVENT_DELETED, "knowledge.article.deleted",
+                row, "DELETED", requireUserId(user), safeVersion(row) + 1L);
         audit(requireUserId(user), "KNOWLEDGE_DELETE", articleId, "删除知识库文章：" + row.getTitle() + remark(request), ip, userAgent);
     }
 
@@ -265,7 +296,11 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         articleMapper.updateStatus(articleId, status, STATUS_PUBLISHED.equals(status), requireUserId(user));
         audit(requireUserId(user), STATUS_PUBLISHED.equals(status) ? "KNOWLEDGE_PUBLISH" : "KNOWLEDGE_OFFLINE",
                 articleId, (STATUS_PUBLISHED.equals(status) ? "发布" : "下线") + "知识库文章：" + row.getTitle() + remark(request), ip, ua);
-        return toArticleVO(requireArticle(articleId), user);
+        KnowledgeArticleRow updated = requireArticle(articleId);
+        recordKnowledgeEvent(STATUS_PUBLISHED.equals(status) ? EVENT_PUBLISHED : EVENT_OFFLINE,
+                STATUS_PUBLISHED.equals(status) ? "knowledge.article.published" : "knowledge.article.offline",
+                updated, status, requireUserId(user));
+        return toArticleVO(updated, user);
     }
 
     @Override
@@ -359,5 +394,20 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private String normalizeTag(String value){String name=value.trim();if(name.isEmpty()||name.length()>64)throw new BusinessException(ErrorCode.PARAM_ERROR,"标签名称不合法");return name;}
     private KnowledgeTagVO toTagVO(KnowledgeTag tag){return new KnowledgeTagVO(String.valueOf(tag.getId()),tag.getName(),tag.getArticleCount()==null?0:tag.getArticleCount());}
     private String remark(KnowledgeActionRequest request){if(request==null)return "";String value=StringUtils.hasText(request.getReason())?request.getReason():request.getPublishRemark();return StringUtils.hasText(value)?"，备注："+value.trim():"";}
+    /** 将知识事件写入当前业务事务；空实现仅用于兼容不装配集成组件的历史单元测试。 */
+    private void recordKnowledgeEvent(String eventType, String routingKey, KnowledgeArticleRow article,
+                                      String status, Long operatorId) {
+        recordKnowledgeEvent(eventType, routingKey, article, status, operatorId, safeVersion(article));
+    }
+    /** 显式版本重载用于逻辑删除后无法再次查询文章的场景。 */
+    private void recordKnowledgeEvent(String eventType, String routingKey, KnowledgeArticleRow article,
+                                      String status, Long operatorId, long aggregateVersion) {
+        if (knowledgeOutboxEventService != null) {
+            knowledgeOutboxEventService.record(eventType, routingKey, article, aggregateVersion, status, operatorId);
+        }
+    }
+    private long safeVersion(KnowledgeArticle article) {
+        return article.getVersion() == null ? 1L : article.getVersion();
+    }
     private void audit(Long operatorId,String operation,Long bizId,String content,String ip,String ua){auditLogService.record(operatorId,operation,"KNOWLEDGE",bizId,content,ip,ua);}
 }
