@@ -5,4 +5,6 @@ logs/
 *.iml
 storage/files/*
 !storage/files/.gitkeep
+storage/avatars/*
+!storage/avatars/.gitkeep
 src/main/resources/key.properties
