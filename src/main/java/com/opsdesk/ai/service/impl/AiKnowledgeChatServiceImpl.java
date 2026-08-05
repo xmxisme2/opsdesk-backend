@@ -2,12 +2,18 @@ package com.opsdesk.ai.service.impl;
 
 import com.opsdesk.ai.config.AiServiceProperties;
 import com.opsdesk.ai.dto.KnowledgeChatRequest;
+import com.opsdesk.ai.dto.AiConversationSearchRequest;
+import com.opsdesk.ai.dto.AiFeedbackRequest;
 import com.opsdesk.ai.security.ServiceJwtTokenIssuer;
 import com.opsdesk.ai.service.AiKnowledgeChatService;
 import com.opsdesk.ai.vo.KnowledgeChatResponseVO;
+import com.opsdesk.ai.vo.AiConversationActionVO;
+import com.opsdesk.ai.vo.AiConversationDetailVO;
+import com.opsdesk.ai.vo.AiConversationVO;
 import com.opsdesk.common.exception.BusinessException;
 import com.opsdesk.common.exception.ErrorCode;
 import com.opsdesk.common.security.CurrentUser;
+import com.opsdesk.common.response.PageResult;
 import com.opsdesk.common.trace.TraceIdConstants;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.MDC;
@@ -17,6 +23,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.time.Duration;
 import java.net.URI;
@@ -26,7 +33,7 @@ import java.net.http.HttpResponse;
 import java.io.InputStream;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-/** 主应用 RAG JSON 代理实现，前端不会直接访问独立 AI 服务。 */
+/** 主应用 AI 代理实现，前端不会直接访问独立 AI 服务。 */
 @Service
 public class AiKnowledgeChatServiceImpl implements AiKnowledgeChatService {
     private final ServiceJwtTokenIssuer tokenIssuer;
@@ -73,12 +80,73 @@ public class AiKnowledgeChatServiceImpl implements AiKnowledgeChatService {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenIssuer.issue(currentUser))
                     .header(TraceIdConstants.TRACE_ID_HEADER, currentTraceId()).body(request).retrieve()
                     .body(new ParameterizedTypeReference<>() { });
+            if (response != null && response.code() == ErrorCode.AI_RESOURCE_FORBIDDEN.getCode()) {
+                throw new BusinessException(ErrorCode.AI_RESOURCE_FORBIDDEN, response.message());
+            }
             if (response == null || response.code() != 200 || response.data() == null) {
                 throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "AI 问答服务响应无效");
             }
             return response.data();
         } catch (BusinessException exception) { throw exception; }
+        catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 403) {
+                throw new BusinessException(ErrorCode.AI_RESOURCE_FORBIDDEN, "无权访问该 AI 会话");
+            }
+            throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "AI 问答服务当前不可用");
+        }
         catch (RestClientException exception) { throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "AI 问答服务当前不可用"); }
+    }
+
+    @Override
+    public PageResult<AiConversationVO> searchConversations(AiConversationSearchRequest request, CurrentUser currentUser) {
+        return post("/internal/ai/conversations/search", request, currentUser, new ParameterizedTypeReference<>() { });
+    }
+
+    @Override
+    public AiConversationDetailVO conversationDetail(String id, CurrentUser currentUser) {
+        return post("/internal/ai/conversations/" + id + "/detail", java.util.Map.of(), currentUser,
+                new ParameterizedTypeReference<>() { });
+    }
+
+    @Override
+    public AiConversationActionVO archiveConversation(String id, CurrentUser currentUser) {
+        return post("/internal/ai/conversations/" + id + "/archive", java.util.Map.of(), currentUser,
+                new ParameterizedTypeReference<>() { });
+    }
+
+    @Override
+    public AiConversationActionVO deleteConversation(String id, CurrentUser currentUser) {
+        return post("/internal/ai/conversations/" + id + "/delete", java.util.Map.of(), currentUser,
+                new ParameterizedTypeReference<>() { });
+    }
+
+    @Override
+    public void feedback(String messageId, AiFeedbackRequest request, CurrentUser currentUser) {
+        post("/internal/ai/messages/" + messageId + "/feedback", request, currentUser,
+                new ParameterizedTypeReference<InternalResponse<Void>>() { });
+    }
+
+    /** 统一附加 Service JWT 和 TraceId，并校验 AI 服务统一响应。 */
+    private <T> T post(String uri, Object body, CurrentUser currentUser, ParameterizedTypeReference<InternalResponse<T>> type) {
+        try {
+            InternalResponse<T> response = restClient.post().uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenIssuer.issue(currentUser))
+                    .header(TraceIdConstants.TRACE_ID_HEADER, currentTraceId()).body(body).retrieve().body(type);
+            if (response != null && response.code() == ErrorCode.AI_RESOURCE_FORBIDDEN.getCode()) {
+                throw new BusinessException(ErrorCode.AI_RESOURCE_FORBIDDEN, response.message());
+            }
+            if (response == null || response.code() != 200) {
+                throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "AI 服务响应无效");
+            }
+            return response.data();
+        } catch (BusinessException exception) { throw exception; }
+        catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 403) {
+                throw new BusinessException(ErrorCode.AI_RESOURCE_FORBIDDEN, "无权访问该 AI 会话或消息");
+            }
+            throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "AI 服务当前不可用");
+        }
+        catch (RestClientException exception) { throw new BusinessException(ErrorCode.AI_SERVICE_UNAVAILABLE, "AI 服务当前不可用"); }
     }
     /** 下游审计沿用当前请求 TraceId；异步输出只透传字节，不再读取 MDC。 */
     private String currentTraceId() {

@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: opsdesk-backend
+  config:
+    # 本地开发与 AI 服务共享固定 Service JWT 密钥；生产环境通过环境变量或挂载文件覆盖。
+    import: optional:file:${AI_SERVICE_KEY_PROPERTIES_PATH:../opsdesk-ai-service/src/main/resources/key.properties}
   datasource:
     # 本地开发数据库配置，生产环境后续改为环境变量或外部配置。
     url: jdbc:mysql://localhost:3306/opsdesk?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
