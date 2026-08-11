@@ -27,6 +27,7 @@ import com.opsdesk.ticket.mapper.TicketWatchMapper;
 import com.opsdesk.ticket.service.TicketNoGenerator;
 import com.opsdesk.ticket.service.TicketStateMachine;
 import com.opsdesk.ticket.vo.TicketVO;
+import com.opsdesk.ticket.vo.TicketTimelineItemVO;
 import com.opsdesk.user.mapper.SysUserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -139,6 +140,21 @@ class TicketServiceImplTest {
         assertThat(ticketCaptor.getValue().getStatus()).isEqualTo("PENDING_ASSIGN");
         assertThat(ticketVO.ticketNo()).isEqualTo("TK202606160001");
         assertThat(ticketVO.status()).isEqualTo("PENDING_ASSIGN");
+    }
+
+    @Test
+    void timelineShouldCheckTicketScopeAndHideInternalCommentsForCreator() {
+        Ticket ticket = pendingAssignTicket(10L, 1L);
+        TicketTimelineItemVO item = new TicketTimelineItemVO();
+        item.setType("OPERATION");
+        item.setTitle("TICKET_CREATE");
+        when(ticketMapper.findById(100L)).thenReturn(ticket);
+        when(ticketOperationLogMapper.searchTimeline(ticket.getId(), false)).thenReturn(List.of(item));
+
+        var result = ticketService.timeline("100", user(10L, "USER"));
+
+        assertThat(result.items()).containsExactly(item);
+        verify(ticketOperationLogMapper).searchTimeline(ticket.getId(), false);
     }
 
     @Test

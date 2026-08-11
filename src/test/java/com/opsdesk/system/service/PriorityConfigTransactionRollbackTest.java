@@ -172,6 +172,11 @@ class PriorityConfigTransactionRollbackTest {
         }
 
         @Override
+        public List<SystemConfig> search(String group, String keyword) {
+            return List.of();
+        }
+
+        @Override
         public int updateValue(String key, String value, Long operatorId) {
             return jdbcTemplate.update("""
                     UPDATE system_config SET config_value=?, update_by=?, update_time=?

@@ -22,6 +22,11 @@ class TicketControllerSecurityTest {
         assertPreAuthorize("reject", "isAuthenticated()");
     }
 
+    @Test
+    void timelineShouldRequireAuthenticationBeforeServiceScopeCheck() throws NoSuchMethodException {
+        assertPreAuthorize("timeline", "isAuthenticated()");
+    }
+
     private void assertPreAuthorize(String methodName, String expected) throws NoSuchMethodException {
         Method method = findMethod(methodName);
         PreAuthorize preAuthorize = method.getAnnotation(PreAuthorize.class);

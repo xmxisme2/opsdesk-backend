@@ -23,4 +23,40 @@
           AND deleted = 0
         ORDER BY create_time DESC, id DESC
     </select>
+
+    <select id="searchTimeline" resultType="com.opsdesk.ticket.vo.TicketTimelineItemVO">
+        SELECT timeline.type, timeline.title, timeline.content, timeline.operator_name, timeline.created_at
+        FROM (
+            SELECT 'OPERATION' AS type, operation_type AS title, content,
+                   COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone, '系统') AS operator_name,
+                   l.create_time AS created_at, l.id AS event_id
+            FROM ticket_operation_log l
+            LEFT JOIN sys_user u ON u.id = l.operator_id AND u.deleted = 0
+            WHERE l.ticket_id = #{ticketId} AND l.deleted = 0
+            UNION ALL
+            SELECT 'COMMENT' AS type,
+                   CASE WHEN c.comment_type = 'INTERNAL' THEN '内部备注' ELSE '公开评论' END AS title,
+                   c.content,
+                   COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone, '未知用户') AS operator_name,
+                   c.create_time AS created_at, c.id AS event_id
+            FROM ticket_comment c
+            LEFT JOIN sys_user u ON u.id = c.author_id AND u.deleted = 0
+            WHERE c.ticket_id = #{ticketId} AND c.deleted = 0
+              <if test="includeInternal == false">AND c.comment_type != 'INTERNAL'</if>
+            UNION ALL
+            SELECT 'ATTACHMENT' AS type, '上传附件' AS title, a.file_name AS content,
+                   COALESCE(NULLIF(u.nickname, ''), NULLIF(u.username, ''), u.phone, '未知用户') AS operator_name,
+                   a.create_time AS created_at, a.id AS event_id
+            FROM ticket_attachment a
+            LEFT JOIN sys_user u ON u.id = a.uploader_id AND u.deleted = 0
+            WHERE a.deleted = 0
+              AND ((a.biz_type = 'TICKET' AND a.biz_id = #{ticketId})
+                OR (a.biz_type = 'COMMENT' AND EXISTS (
+                    SELECT 1 FROM ticket_comment ac
+                    WHERE ac.id = a.biz_id AND ac.ticket_id = #{ticketId} AND ac.deleted = 0
+                      <if test="includeInternal == false">AND ac.comment_type != 'INTERNAL'</if>
+                )))
+        ) timeline
+        ORDER BY timeline.created_at DESC, timeline.event_id DESC
+    </select>
 </mapper>

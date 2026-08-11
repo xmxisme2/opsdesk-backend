@@ -20,6 +20,7 @@ import com.opsdesk.ticket.vo.TicketListItemVO;
 import com.opsdesk.ticket.vo.TicketOperationLogVO;
 import com.opsdesk.ticket.vo.TicketVO;
 import com.opsdesk.ticket.vo.TicketWatchVO;
+import com.opsdesk.ticket.vo.TicketTimelineVO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -267,6 +268,17 @@ public class TicketController {
                                                                              @RequestBody(required = false) PageQuery request,
                                                                              @AuthenticationPrincipal CurrentUser currentUser) {
         return ApiResponse.success(ticketService.searchOperationLogs(id, request, currentUser));
+    }
+
+    /** 返回操作日志、评论和附件组成的工单混合时间线。 */
+    @PostMapping("/{id}/timeline")
+    @PreAuthorize("isAuthenticated()")
+    @RateLimit(limit = RateLimitDefaults.SEARCH_LIMIT_PER_MINUTE,
+            windowSeconds = RateLimitDefaults.ONE_MINUTE_SECONDS,
+            keyType = RateLimitKeyType.USER)
+    public ApiResponse<TicketTimelineVO> timeline(@PathVariable String id,
+                                                   @AuthenticationPrincipal CurrentUser currentUser) {
+        return ApiResponse.success(ticketService.timeline(id, currentUser));
     }
 
     private String requestIp(HttpServletRequest servletRequest) {

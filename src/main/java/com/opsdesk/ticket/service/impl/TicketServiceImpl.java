@@ -45,6 +45,7 @@ import com.opsdesk.ticket.vo.TicketListItemVO;
 import com.opsdesk.ticket.vo.TicketOperationLogVO;
 import com.opsdesk.ticket.vo.TicketVO;
 import com.opsdesk.ticket.vo.TicketWatchVO;
+import com.opsdesk.ticket.vo.TicketTimelineVO;
 import com.opsdesk.user.entity.SysUser;
 import com.opsdesk.user.mapper.SysUserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -672,6 +673,19 @@ public class TicketServiceImpl implements TicketService {
                 parseOptionalDateTime(request.getCreatedFrom(), "创建开始时间"),
                 parseOptionalDateTime(request.getCreatedTo(), "创建结束时间")
         );
+    }
+
+    @Override
+    public TicketTimelineVO timeline(String id, CurrentUser currentUser) {
+        Ticket ticket = loadTicket(parseRequiredId(id, "工单ID"));
+        ensureAccessible(ticket, currentUser);
+        Long userId = requireUserId(currentUser);
+        boolean includeInternal = hasRole(currentUser, "AGENT")
+                || hasRole(currentUser, ROLE_MANAGER)
+                || hasRole(currentUser, ROLE_ADMIN)
+                || sameUser(userId, ticket.getAssigneeId())
+                || isTeamMember(ticket.getTeamId(), userId);
+        return new TicketTimelineVO(ticketOperationLogMapper.searchTimeline(ticket.getId(), includeInternal));
     }
 
     /**

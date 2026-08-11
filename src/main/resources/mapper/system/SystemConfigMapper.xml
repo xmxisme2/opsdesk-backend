@@ -7,6 +7,17 @@
         WHERE config_group = #{group} AND deleted = 0
         ORDER BY id ASC
     </select>
+    <select id="search" resultType="com.opsdesk.system.entity.SystemConfig">
+        SELECT id, config_key, config_value, config_group, description, editable, `sensitive`
+        FROM system_config
+        WHERE deleted = 0
+        <if test="group != null and group != ''">AND config_group = #{group}</if>
+        <if test="keyword != null and keyword != ''">
+            AND (config_key LIKE CONCAT('%', #{keyword}, '%')
+              OR description LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY config_group ASC, config_key ASC
+    </select>
     <update id="updateValue">
         UPDATE system_config
         SET config_value = #{value}, update_by = #{operatorId}, update_time = CURRENT_TIMESTAMP

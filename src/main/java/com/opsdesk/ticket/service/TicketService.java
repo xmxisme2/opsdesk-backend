@@ -14,6 +14,7 @@ import com.opsdesk.ticket.vo.TicketListItemVO;
 import com.opsdesk.ticket.vo.TicketOperationLogVO;
 import com.opsdesk.ticket.vo.TicketVO;
 import com.opsdesk.ticket.vo.TicketWatchVO;
+import com.opsdesk.ticket.vo.TicketTimelineVO;
 
 /**
  * 工单主流程服务。
@@ -62,4 +63,7 @@ public interface TicketService {
     TicketWatchVO unwatch(String id, CurrentUser currentUser, String requestIp, String userAgent);
 
     PageResult<TicketOperationLogVO> searchOperationLogs(String id, PageQuery request, CurrentUser currentUser);
+
+    /** 查询工单操作、评论和附件组成的混合时间线。 */
+    TicketTimelineVO timeline(String id, CurrentUser currentUser);
 }

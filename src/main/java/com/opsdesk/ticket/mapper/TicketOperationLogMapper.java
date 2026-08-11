@@ -1,6 +1,7 @@
 package com.opsdesk.ticket.mapper;
 
 import com.opsdesk.ticket.entity.TicketOperationLog;
+import com.opsdesk.ticket.vo.TicketTimelineItemVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -17,4 +18,8 @@ public interface TicketOperationLogMapper {
     int insert(TicketOperationLog log);
 
     List<TicketOperationLog> searchByTicketId(@Param("ticketId") Long ticketId);
+
+    /** 聚合工单操作、评论和附件事件；普通提交人不可读取内部备注。 */
+    List<TicketTimelineItemVO> searchTimeline(@Param("ticketId") Long ticketId,
+                                              @Param("includeInternal") boolean includeInternal);
 }
