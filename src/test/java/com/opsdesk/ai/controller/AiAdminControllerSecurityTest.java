@@ -36,4 +36,26 @@ class AiAdminControllerSecurityTest {
 
         assertEquals("hasRole('ADMIN')", preAuthorize.value());
     }
+
+    @Test
+    void qualityOverviewEndpointShouldRequireAdminRole() throws Exception {
+        Method method = AiAdminController.class.getMethod(
+                "qualityOverview",
+                com.opsdesk.ai.dto.AiQualityRangeRequest.class,
+                com.opsdesk.common.security.CurrentUser.class
+        );
+
+        assertEquals("hasRole('ADMIN')", method.getAnnotation(PreAuthorize.class).value());
+    }
+
+    @Test
+    void qualitySamplesEndpointShouldRequireAdminRole() throws Exception {
+        Method method = AiAdminController.class.getMethod(
+                "searchQualitySamples",
+                com.opsdesk.ai.dto.AiQualitySampleSearchRequest.class,
+                com.opsdesk.common.security.CurrentUser.class
+        );
+
+        assertEquals("hasRole('ADMIN')", method.getAnnotation(PreAuthorize.class).value());
+    }
 }
