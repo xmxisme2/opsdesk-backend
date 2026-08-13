@@ -1,6 +1,10 @@
 package com.opsdesk.system.vo;
 
-/** AI 公开运行设置；只包含开关、供应商、模型和免责声明，不包含任何密钥。 */
+import java.time.LocalDateTime;
+
+/** AI 公开运行设置；包含期望状态、最终状态和环境放行状态，不包含任何密钥。 */
 public record AiSettingsVO(boolean enabled, String provider, String model,
-                           boolean ragEnabled, String disclaimer) {
+                           boolean ragEnabled, boolean effectiveEnabled, boolean effectiveRagEnabled,
+                           boolean environmentEnabled, boolean environmentRagEnabled,
+                           String disclaimer, LocalDateTime updateTime) {
 }
